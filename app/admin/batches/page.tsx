@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { createBatch } from '@/app/actions/admin';
+import { createBatch, updateBatch, deleteBatch } from '@/app/actions/admin';
 import { MOCK_BATCHES, MOCK_DEPARTMENTS } from '@/lib/mock-data';
 
 export default function AdminBatchesPage() {
@@ -10,6 +10,10 @@ export default function AdminBatchesPage() {
   const [deptCode, setDeptCode] = useState<'SW' | 'AI'>('SW');
   const [year, setYear] = useState<number>(2025);
   const [isAdding, setIsAdding] = useState(false);
+
+  const [editingBatch, setEditingBatch] = useState<any | null>(null);
+  const [deletingBatch, setDeletingBatch] = useState<any | null>(null);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
 
   async function handleAddBatch(e: React.FormEvent) {
@@ -39,6 +43,49 @@ export default function AdminBatchesPage() {
     setTimeout(() => setFeedback(null), 3500);
   }
 
+  async function handleUpdateBatch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingBatch) return;
+
+    setFeedback(`Updating batch ${editingBatch.code}...`);
+    const res = await updateBatch(editingBatch.id, {
+      code: editingBatch.code,
+      year: editingBatch.year,
+    });
+
+    if (res.error) {
+      setFeedback(`Note: ${res.error.message} (Updated locally)`);
+    } else {
+      setFeedback('Batch updated successfully!');
+    }
+
+    setBatches(batches.map((b) => (b.id === editingBatch.id ? editingBatch : b)));
+    setEditingBatch(null);
+    setTimeout(() => setFeedback(null), 3500);
+  }
+
+  async function handleConfirmDelete() {
+    if (!deletingBatch) return;
+    if (deleteConfirmInput.trim().toUpperCase() !== 'DELETE') {
+      alert('Please type DELETE to confirm permission to remove this batch.');
+      return;
+    }
+
+    setFeedback(`Deleting batch ${deletingBatch.code}...`);
+    const res = await deleteBatch(deletingBatch.id);
+
+    if (res.error) {
+      setFeedback(`Note: ${res.error.message} (Removed locally)`);
+    } else {
+      setFeedback('Batch deleted from tournament records.');
+    }
+
+    setBatches(batches.filter((b) => b.id !== deletingBatch.id));
+    setDeletingBatch(null);
+    setDeleteConfirmInput('');
+    setTimeout(() => setFeedback(null), 3500);
+  }
+
   return (
     <div className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full">
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-outline-variant/30 pb-4">
@@ -53,7 +100,10 @@ export default function AdminBatchesPage() {
 
         <button
           type="button"
-          onClick={() => setIsAdding(!isAdding)}
+          onClick={() => {
+            setIsAdding(!isAdding);
+            setEditingBatch(null);
+          }}
           className="bg-gold-accent text-navy-deep font-caps-label text-xs uppercase px-4 py-2.5 font-bold hover:bg-white transition-colors cursor-pointer w-fit flex items-center gap-2"
         >
           <span className="material-symbols-outlined text-base">{isAdding ? 'close' : 'add'}</span>
@@ -67,6 +117,7 @@ export default function AdminBatchesPage() {
         </div>
       )}
 
+      {/* ── Add Batch Form ── */}
       {isAdding && (
         <form
           onSubmit={handleAddBatch}
@@ -124,7 +175,134 @@ export default function AdminBatchesPage() {
         </form>
       )}
 
-      {/* Batches Table */}
+      {/* ── Edit Batch Modal ── */}
+      {editingBatch && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={handleUpdateBatch}
+            className="w-full max-w-md bg-surface-container border border-gold-accent p-6 rounded shadow-2xl"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-outline-variant/30 mb-4">
+              <h3 className="font-display text-gold-accent uppercase text-lg">
+                EDIT BATCH: {editingBatch.code}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingBatch(null)}
+                className="text-fog-text hover:text-white"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-4 mb-4">
+              <div>
+                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                  Batch Code
+                </label>
+                <input
+                  type="text"
+                  value={editingBatch.code}
+                  onChange={(e) =>
+                    setEditingBatch({ ...editingBatch, code: e.target.value })
+                  }
+                  required
+                  className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                  Class Year
+                </label>
+                <input
+                  type="number"
+                  value={editingBatch.year}
+                  onChange={(e) =>
+                    setEditingBatch({ ...editingBatch, year: Number(e.target.value) })
+                  }
+                  required
+                  className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-outline-variant/20">
+              <button
+                type="button"
+                onClick={() => setEditingBatch(null)}
+                className="px-4 py-2 border border-outline-variant/40 text-fog-text font-caps-label text-xs uppercase hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white"
+              >
+                Update Batch
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation with Permission Guard ── */}
+      {deletingBatch && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-surface-container border-2 border-live-red p-6 rounded shadow-2xl">
+            <div className="flex items-center gap-3 text-live-red mb-3">
+              <span className="material-symbols-outlined text-2xl">warning</span>
+              <h3 className="font-display uppercase text-lg">
+                CONFIRM BATCH DELETION
+              </h3>
+            </div>
+
+            <p className="text-xs sm:text-sm text-fog-text mb-4">
+              You are about to delete batch <strong className="text-white">{deletingBatch.code}</strong>.
+              This removes the batch from the tournament leaderboard and squads.
+            </p>
+
+            <div className="mb-5 p-3 bg-navy-mid/60 border border-outline-variant/30 rounded">
+              <label className="block text-xs font-caps-label text-white uppercase mb-1 font-bold">
+                Security Permission Check:
+              </label>
+              <p className="text-[11px] text-fog-text mb-2">
+                Type <span className="text-live-red font-mono font-bold">DELETE</span> to confirm removal.
+              </p>
+              <input
+                type="text"
+                placeholder="Type DELETE"
+                value={deleteConfirmInput}
+                onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                className="w-full px-3 py-2 bg-surface-container-lowest border border-live-red/50 rounded text-white text-xs font-mono tracking-widest"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeletingBatch(null);
+                  setDeleteConfirmInput('');
+                }}
+                className="px-4 py-2 border border-outline-variant/40 text-fog-text font-caps-label text-xs uppercase hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleteConfirmInput.trim().toUpperCase() !== 'DELETE'}
+                className="px-5 py-2 bg-live-red text-white font-caps-label text-xs uppercase font-bold hover:bg-white hover:text-live-red disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                Delete Batch
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Batches Table ── */}
       <div className="overflow-x-auto bg-surface-container border border-outline-variant/20 rounded shadow">
         <table className="w-full text-left border-collapse text-xs sm:text-sm">
           <thead>
@@ -133,6 +311,7 @@ export default function AdminBatchesPage() {
               <th className="p-3.5">DEPARTMENT</th>
               <th className="p-3.5">CLASS YEAR</th>
               <th className="p-3.5">STATUS</th>
+              <th className="p-3.5 text-right">ACTIONS</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant/15">
@@ -151,6 +330,30 @@ export default function AdminBatchesPage() {
                   <span className="px-2 py-0.5 rounded text-[10px] font-caps-label uppercase bg-win-green/20 text-win-green border border-win-green/40">
                     Contesting
                   </span>
+                </td>
+                <td className="p-3.5 text-right space-x-2 whitespace-nowrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingBatch(b);
+                      setIsAdding(false);
+                    }}
+                    className="px-2.5 py-1 text-xs font-caps-label uppercase bg-surface-container-highest text-gold-accent hover:bg-gold-accent hover:text-navy-deep rounded font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-sm">edit</span>
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeletingBatch(b);
+                      setDeleteConfirmInput('');
+                    }}
+                    className="px-2.5 py-1 text-xs font-caps-label uppercase bg-surface-container-highest text-live-red hover:bg-live-red hover:text-white rounded font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-sm">delete</span>
+                    <span>Delete</span>
+                  </button>
                 </td>
               </tr>
             ))}

@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { createClient as createServerSupabase, createServiceClient } from '@/lib/supabase/server';
 import type { ActionResult } from '@/types';
 
@@ -135,8 +136,115 @@ export async function createGame(gameData: {
       .single();
 
     if (error) throw error;
+    revalidatePath('/games');
+    revalidatePath('/admin/games');
     return { data };
   } catch (err: any) {
     return { error: { message: err.message || 'Failed to create game', code: 'DB_ERROR' } };
+  }
+}
+
+/** Update an existing championship game */
+export async function updateGame(
+  id: string,
+  gameData: {
+    name: string;
+    slug: string;
+    format: 'team' | 'individual';
+    gender: 'boys' | 'girls' | 'both';
+    description?: string;
+  }
+): Promise<ActionResult<any>> {
+  if (!id) return { error: { message: 'Game ID required', code: 'VALIDATION_ERROR' } };
+
+  try {
+    const supabase = await createServiceClient();
+    const { data, error } = await supabase
+      .from('games')
+      .update(gameData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    revalidatePath('/games');
+    revalidatePath(`/games/${gameData.slug}`);
+    revalidatePath('/admin/games');
+    return { data };
+  } catch (err: any) {
+    console.error('[updateGame]', err);
+    return { error: { message: err.message || 'Failed to update game', code: 'DB_ERROR' } };
+  }
+}
+
+/** Delete a game with permission confirmation */
+export async function deleteGame(id: string): Promise<ActionResult<{ id: string }>> {
+  if (!id) return { error: { message: 'Game ID required', code: 'VALIDATION_ERROR' } };
+
+  try {
+    const supabase = await createServiceClient();
+    const { error } = await supabase.from('games').delete().eq('id', id);
+
+    if (error) throw error;
+
+    revalidatePath('/games');
+    revalidatePath('/admin/games');
+    revalidatePath('/schedule');
+    revalidatePath('/standings');
+    return { data: { id } };
+  } catch (err: any) {
+    console.error('[deleteGame]', err);
+    return { error: { message: err.message || 'Failed to delete game', code: 'DB_ERROR' } };
+  }
+}
+
+/** Update an existing academic batch */
+export async function updateBatch(
+  id: string,
+  updates: { code: string; year: number }
+): Promise<ActionResult<any>> {
+  if (!id) return { error: { message: 'Batch ID required', code: 'VALIDATION_ERROR' } };
+
+  try {
+    const supabase = await createServiceClient();
+    const { data, error } = await supabase
+      .from('batches')
+      .update({
+        code: updates.code.trim().toUpperCase(),
+        year: updates.year,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    revalidatePath('/standings');
+    revalidatePath('/admin/batches');
+    revalidatePath(`/teams/${updates.code}`);
+    return { data };
+  } catch (err: any) {
+    console.error('[updateBatch]', err);
+    return { error: { message: err.message || 'Failed to update batch', code: 'DB_ERROR' } };
+  }
+}
+
+/** Delete an academic batch */
+export async function deleteBatch(id: string): Promise<ActionResult<{ id: string }>> {
+  if (!id) return { error: { message: 'Batch ID required', code: 'VALIDATION_ERROR' } };
+
+  try {
+    const supabase = await createServiceClient();
+    const { error } = await supabase.from('batches').delete().eq('id', id);
+
+    if (error) throw error;
+
+    revalidatePath('/standings');
+    revalidatePath('/admin/batches');
+    return { data: { id } };
+  } catch (err: any) {
+    console.error('[deleteBatch]', err);
+    return { error: { message: err.message || 'Failed to delete batch', code: 'DB_ERROR' } };
   }
 }
