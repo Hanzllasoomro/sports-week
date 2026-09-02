@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { createServiceClient } from '@/lib/supabase/server';
 import { recomputeStanding } from '@/lib/points';
 import { ScoreEntrySchema, IndividualResultSchema } from '@/lib/validation/schemas';
@@ -55,6 +56,14 @@ export async function saveResult(raw: unknown): Promise<ActionResult<Fixture>> {
 
     await Promise.all([...batchIds].map(recomputeStanding));
 
+    // Revalidate cached pages so public visitors see instant updates
+    revalidatePath('/');
+    revalidatePath('/standings');
+    revalidatePath('/live');
+    revalidatePath('/schedule');
+    revalidatePath('/admin/dashboard');
+    revalidatePath('/admin/results');
+
     return { data };
   } catch (err: unknown) {
     console.error('[saveResult]', err);
@@ -85,6 +94,13 @@ export async function saveIndividualResult(raw: unknown): Promise<ActionResult<I
     if (error) throw error;
 
     await recomputeStanding(parsed.data.batch_id);
+
+    // Revalidate cached public views
+    revalidatePath('/');
+    revalidatePath('/standings');
+    revalidatePath('/live');
+    revalidatePath('/admin/dashboard');
+    revalidatePath('/admin/results');
 
     return { data };
   } catch (err: unknown) {

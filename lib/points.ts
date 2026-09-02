@@ -43,15 +43,34 @@ export async function recomputeStanding(batchId: string): Promise<void> {
 
     if (!breakdown[gameSlug]) breakdown[gameSlug] = { boys: 0, girls: 0 };
 
-    const isWinner =
-      fixture.winner_team_id &&
-      (fixture.team_a?.batch_id === batchId || fixture.team_b?.batch_id === batchId);
+    const isWinnerA = fixture.winner_team_id === fixture.team_a_id;
+    const isWinnerB = fixture.winner_team_id === fixture.team_b_id;
 
-    if (!isWinner) continue;
+    const batchIsTeamA = fixture.team_a?.batch_id === batchId;
+    const batchIsTeamB = fixture.team_b?.batch_id === batchId;
 
-    const pts = lookupTeamPoints(rules ?? [], fixture.game_id, fixture.stage, 1);
-    breakdown[gameSlug][gender] += pts;
-    totalPoints += pts;
+    let pts = 0;
+
+    if (fixture.stage === 'final') {
+      if ((batchIsTeamA && isWinnerA) || (batchIsTeamB && isWinnerB)) {
+        pts = lookupTeamPoints(rules ?? [], fixture.game_id, 'final', 1);
+      } else if ((batchIsTeamA && isWinnerB) || (batchIsTeamB && isWinnerA)) {
+        pts = lookupTeamPoints(rules ?? [], fixture.game_id, 'final', 2);
+      }
+    } else {
+      // Group or Semifinal
+      const isWinner =
+        (batchIsTeamA && isWinnerA) || (batchIsTeamB && isWinnerB);
+
+      if (isWinner) {
+        pts = lookupTeamPoints(rules ?? [], fixture.game_id, fixture.stage, 1);
+      }
+    }
+
+    if (pts > 0) {
+      breakdown[gameSlug][gender] += pts;
+      totalPoints += pts;
+    }
   }
 
   // 5. Sum individual game points
@@ -81,14 +100,21 @@ function lookupTeamPoints(
   stage: string,
   position: number
 ): number {
-  // Prefer game-specific rule, fall back to default (game_id = null)
+  // Prefer game-specific rule
   const specific = rules.find(
-    (r) => r.game_id === gameId && r.stage === stage && r.position === position
+    (r) =>
+      r.game_id === gameId &&
+      r.stage === stage &&
+      (r.position === position || r.position === null)
   );
   if (specific) return specific.points;
 
+  // Fall back to default (game_id = null)
   const defaultRule = rules.find(
-    (r) => r.game_id === null && r.stage === stage && r.position === position
+    (r) =>
+      r.game_id === null &&
+      r.stage === stage &&
+      (r.position === position || r.position === null)
   );
   return defaultRule?.points ?? 0;
 }

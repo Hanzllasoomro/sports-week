@@ -53,7 +53,7 @@ export function SideNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 px-4 py-3 font-caps-label uppercase text-sm transition-all duration-200 ease-in-out rounded-sm',
+                'flex items-center gap-3 px-4 py-3 font-caps-label uppercase text-sm transition-all duration-200 ease-in-out rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-accent',
                 isActive
                   ? 'bg-navy-mid text-gold-accent border-l-4 border-gold-accent font-bold pl-3'
                   : 'text-on-surface-variant hover:bg-navy-mid/40 hover:text-on-surface border-l-4 border-transparent'
@@ -80,7 +80,7 @@ export function SideNav() {
       <div className="px-6 mt-auto flex flex-col gap-3 pt-4 border-t border-outline-variant/20">
         <Link
           href="/live"
-          className="w-full bg-gold-accent text-navy-deep font-caps-label uppercase py-3 px-4 flex items-center justify-center gap-2 hover:bg-white transition-colors text-xs tracking-wider shadow-sm font-bold"
+          className="w-full bg-gold-accent text-navy-deep font-caps-label uppercase py-3 px-4 flex items-center justify-center gap-2 hover:bg-white transition-colors text-xs tracking-wider shadow-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-accent"
         >
           <span className="material-symbols-outlined text-base">sensors</span>
           View Live Feed
@@ -89,7 +89,7 @@ export function SideNav() {
         <div className="flex items-center justify-between text-xs font-caps-label text-on-surface-variant px-1 pt-1">
           <Link
             href="/admin/login"
-            className="hover:text-gold-accent transition-colors flex items-center gap-1 text-[11px]"
+            className="hover:text-gold-accent transition-colors flex items-center gap-1 text-[11px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold-accent rounded"
           >
             <span className="material-symbols-outlined text-sm">lock</span>
             Admin Portal

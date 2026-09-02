@@ -35,7 +35,7 @@ export function ScheduleView({ initialFixtures, games }: ScheduleViewProps) {
   return (
     <div className="w-full">
       {/* ── Day Navigation Tabs (Horizontally scrollable on mobile) ── */}
-      <div className="border-b border-outline-variant/30 mb-6 overflow-x-auto no-scrollbar">
+      <div className="border-b border-outline-variant/30 mb-6 overflow-x-auto no-scrollbar" role="tablist" aria-label="Tournament Days">
         <div className="flex gap-4 sm:gap-8 min-w-max pb-1">
           {DAYS.map((d) => {
             const isActive = selectedDay === d.day;
@@ -43,9 +43,11 @@ export function ScheduleView({ initialFixtures, games }: ScheduleViewProps) {
               <button
                 key={d.day}
                 type="button"
+                role="tab"
+                aria-selected={isActive}
                 onClick={() => setSelectedDay(d.day)}
                 className={cn(
-                  'pb-3 font-caps-label text-xs sm:text-sm uppercase tracking-wider transition-all whitespace-nowrap border-b-2 font-bold cursor-pointer',
+                  'pb-3 font-caps-label text-xs sm:text-sm uppercase tracking-wider transition-all whitespace-nowrap border-b-2 font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-accent rounded-sm',
                   isActive
                     ? 'border-gold-accent text-gold-accent'
                     : 'border-transparent text-fog-text hover:text-white hover:border-fog-text/40'

@@ -1,31 +1,87 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import type { StandingRow } from '@/types';
 import { cn } from '@/lib/utils';
+import { createClient } from '@/lib/supabase/client';
 
 interface StandingsTableProps {
   initialStandings: StandingRow[];
 }
 
 export function StandingsTable({ initialStandings }: StandingsTableProps) {
+  const [standings, setStandings] = useState<StandingRow[]>(initialStandings);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [lastSync, setLastSync] = useState<Date>(new Date());
 
-  const selectedStanding = initialStandings.find(
-    (s) => s.batch.id === selectedBatchId
-  );
+  useEffect(() => {
+    let channel: any = null;
+    try {
+      const supabase = createClient();
+      channel = supabase
+        .channel('public_standings_updates')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'standings' },
+          () => {
+            fetchLatestStandings();
+          }
+        )
+        .subscribe();
+    } catch {
+      // ignore
+    }
+
+    const interval = setInterval(() => {
+      fetchLatestStandings();
+    }, 20000);
+
+    return () => {
+      clearInterval(interval);
+      if (channel) {
+        try {
+          const supabase = createClient();
+          supabase.removeChannel(channel);
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, []);
+
+  async function fetchLatestStandings() {
+    try {
+      const res = await fetch('/api/standings');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setStandings(data);
+          setLastSync(new Date());
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   return (
     <div className="w-full">
-      {/* Informational Callout */}
-      <div className="mb-6 p-3.5 sm:p-4 bg-navy-mid/60 border border-gold-accent/30 rounded flex items-start gap-3">
-        <span className="material-symbols-outlined text-gold-accent text-xl mt-0.5 shrink-0">
-          info
-        </span>
-        <div className="text-xs sm:text-sm text-fog-text">
-          <span className="text-white font-bold">Unified University Standings:</span>{' '}
-          Points earned by Boys and Girls teams/athletes across all 10 championship sports are combined into the batch total. Click any batch to view its sport-by-sport point breakdown.
+      {/* Informational Callout & Live Sync Status */}
+      <div className="mb-6 p-3.5 sm:p-4 bg-navy-mid/60 border border-gold-accent/30 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="material-symbols-outlined text-gold-accent text-xl mt-0.5 shrink-0">
+            info
+          </span>
+          <div className="text-xs sm:text-sm text-fog-text">
+            <span className="text-white font-bold">Unified University Standings:</span>{' '}
+            Points earned by Boys and Girls teams/athletes across all 10 sports are combined into the batch total.
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-end sm:self-auto text-[11px] font-caps-label text-gold-accent uppercase font-bold shrink-0 bg-surface-container px-2.5 py-1 rounded border border-outline-variant/30">
+          <span className="w-2 h-2 rounded-full bg-win-green" />
+          <span suppressHydrationWarning>Auto-Sync (~20s)</span>
         </div>
       </div>
 
@@ -41,7 +97,7 @@ export function StandingsTable({ initialStandings }: StandingsTableProps) {
 
         {/* Rows */}
         <div className="divide-y divide-outline-variant/15">
-          {initialStandings.map((row) => {
+          {standings.map((row) => {
             const isRank1 = row.rank === 1;
             const isSelected = selectedBatchId === row.batch.id;
 
