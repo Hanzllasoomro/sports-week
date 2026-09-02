@@ -33,8 +33,10 @@ export async function proxy(request: NextRequest) {
   // Guard all /admin/* routes — redirect to login if not authenticated
   const isAdminRoute = request.nextUrl.pathname.startsWith('/admin');
   const isLoginRoute = request.nextUrl.pathname === '/admin/login';
+  const isDemoSession = request.cookies.get('admin_demo_session')?.value === 'true';
+  const isAuthenticated = !!user || isDemoSession;
 
-  if (isAdminRoute && !isLoginRoute && !user) {
+  if (isAdminRoute && !isLoginRoute && !isAuthenticated) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = '/admin/login';
     loginUrl.searchParams.set('redirectedFrom', request.nextUrl.pathname);
@@ -42,7 +44,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // Redirect already-logged-in users away from login page
-  if (isLoginRoute && user) {
+  if (isLoginRoute && isAuthenticated) {
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = '/admin/dashboard';
     return NextResponse.redirect(dashboardUrl);

@@ -312,3 +312,12 @@ body {
     @apply font-sans;
   }
 }
+
+/* ─── Mobile Safe Area Utilities ────────────────────────── */
+.pb-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+.bottom-safe {
+  bottom: env(safe-area-inset-bottom, 0px);
+}
