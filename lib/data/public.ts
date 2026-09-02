@@ -165,3 +165,35 @@ export async function getBatchByCode(code: string): Promise<{
 
   return { batch, standing, fixtures, players };
 }
+
+export async function getTeams(): Promise<any[]> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('teams')
+      .select('*, batch:batches(*)')
+      .order('name');
+    if (!error && data && data.length > 0) {
+      return data;
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+export async function getPlayers(): Promise<any[]> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('players')
+      .select('*, batch:batches(*)')
+      .order('name');
+    if (!error && data && data.length > 0) {
+      return data;
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}

@@ -22,6 +22,27 @@ export default function AdminResultsPage() {
   const [podiumPosition, setPodiumPosition] = useState<number>(1);
   const [podiumPoints, setPodiumPoints] = useState<number>(10);
 
+  // Load real fixtures from API on mount
+  useEffect(() => {
+    async function loadFixtures() {
+      try {
+        const res = await fetch('/api/fixtures');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setFixtures(data);
+            if (!selectedFixtureId || !data.some((f: any) => f.id === selectedFixtureId)) {
+              setSelectedFixtureId(data[0].id);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load fixtures', err);
+      }
+    }
+    loadFixtures();
+  }, []);
+
   const selectedFixture = fixtures.find((f) => f.id === selectedFixtureId) || fixtures[0];
 
   useEffect(() => {
@@ -52,6 +73,14 @@ export default function AdminResultsPage() {
             ? selectedFixture.team_b?.id
             : null
           : null,
+      winner_player_id:
+        status === 'completed'
+          ? scoreA > scoreB
+            ? selectedFixture.player_a?.id
+            : scoreB > scoreA
+            ? selectedFixture.player_b?.id
+            : null
+          : null,
     });
 
     if (res.error) {
@@ -70,10 +99,10 @@ export default function AdminResultsPage() {
     setTimeout(() => setFeedback(null), 4000);
   }
 
-  async function handleSaveIndividual(e: React.FormEvent) {
+  async function handleSavePodium(e: React.FormEvent) {
     e.preventDefault();
     setIsSubmitting(true);
-    setFeedback('Recording podium finish & updating batch standings...');
+    setFeedback('Crediting podium points...');
 
     const res = await saveIndividualResult({
       game_id: podiumGameId,
@@ -86,27 +115,38 @@ export default function AdminResultsPage() {
     if (res.error) {
       setFeedback(`Error: ${res.error.message}`);
     } else {
-      setFeedback('Podium medal recorded & batch points credited!');
+      setFeedback(`Awarded ${podiumPoints} points for Position #${podiumPosition}! Standings updated.`);
     }
     setIsSubmitting(false);
     setTimeout(() => setFeedback(null), 4000);
   }
 
+  const isIndividualMatch = selectedFixture?.game?.format === 'individual';
+  const competitorAName =
+    selectedFixture?.player_a?.name || selectedFixture?.team_a?.name || 'Competitor A';
+  const competitorBName =
+    selectedFixture?.player_b?.name || selectedFixture?.team_b?.name || 'Competitor B';
+
+  const competitorABatch =
+    selectedFixture?.player_a?.batch?.code || selectedFixture?.team_a?.batch?.code || 'Batch';
+  const competitorBBatch =
+    selectedFixture?.player_b?.batch?.code || selectedFixture?.team_b?.batch?.code || 'Batch';
+
   return (
     <div className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full">
-      {/* Top Header */}
+      {/* Page Title & Navigation Tabs */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-outline-variant/30 pb-4">
         <div>
           <h1 className="font-display text-white text-2xl sm:text-3xl uppercase tracking-tight">
-            SCORE &amp; RESULT ENTRY
+            SCORE &amp; RESULT ENTRY ROOM
           </h1>
           <p className="font-body text-fog-text text-xs sm:text-sm mt-1">
-            Real-time score adjustments and podium medal points allocation
+            Real-time score adjustments for team fixtures and individual sport podium medals
           </p>
         </div>
 
-        {/* Mode switcher tabs */}
-        <div className="flex gap-2">
+        {/* Tab Switcher */}
+        <div className="flex items-center rounded border border-outline-variant/40 p-1 bg-surface-container-lowest">
           <button
             type="button"
             onClick={() => setTab('team')}
@@ -116,7 +156,7 @@ export default function AdminResultsPage() {
                 : 'bg-surface-container text-fog-text hover:text-white'
             }`}
           >
-            Team Matches
+            Match Scoreboard
           </button>
           <button
             type="button"
@@ -156,7 +196,7 @@ export default function AdminResultsPage() {
               >
                 {fixtures.map((f) => (
                   <option key={f.id} value={f.id}>
-                    [{f.status.toUpperCase()}] {f.game.name} —{' '}
+                    [{f.status.toUpperCase()}] {f.game?.name} —{' '}
                     {f.team_a?.name || f.player_a?.name || 'TBD'} vs{' '}
                     {f.team_b?.name || f.player_b?.name || 'TBD'} ({f.round || f.stage})
                   </option>
@@ -171,7 +211,7 @@ export default function AdminResultsPage() {
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-gold-accent">sports</span>
                     <span className="font-caps-label text-sm uppercase text-white font-bold">
-                      {selectedFixture.game.name} &bull; {selectedFixture.round || selectedFixture.stage}
+                      {selectedFixture.game?.name} &bull; {selectedFixture.round || selectedFixture.stage}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 px-2.5 py-1 bg-surface-container-highest rounded text-xs font-caps-label text-live-red uppercase font-bold border border-live-red/40">
@@ -182,17 +222,17 @@ export default function AdminResultsPage() {
 
                 {/* Big +/- Giant Score Controls (matching Stitch 06-score-entry.html) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
-                  {/* Team A */}
+                  {/* Competitor A */}
                   <div className="bg-surface-container-lowest p-5 rounded border border-outline-variant/30 text-center">
                     <div className="font-h2 text-base sm:text-lg uppercase text-white font-bold truncate">
-                      {selectedFixture.team_a?.name || 'Team A'}
+                      {competitorAName}
                     </div>
                     <span className="font-caps-label text-xs text-gold-accent block mb-4">
-                      {selectedFixture.team_a?.batch?.code || 'Batch'}
+                      {competitorABatch} {selectedFixture.player_a?.roll_no && `(${selectedFixture.player_a.roll_no})`}
                     </span>
 
                     {/* Big Score Display */}
-                    <div className="font-display text-6xl sm:text-7xl text-gold-accent my-3">
+                    <div className="font-display text-6xl sm:text-7xl text-gold-accent my-3 font-table-numeral">
                       {scoreA}
                     </div>
 
@@ -201,47 +241,49 @@ export default function AdminResultsPage() {
                       <button
                         type="button"
                         onClick={() => setScoreA(Math.max(0, scoreA - 1))}
-                        className="w-12 h-12 rounded bg-surface-container-high hover:bg-white hover:text-navy-deep text-white font-display text-2xl flex items-center justify-center transition-colors cursor-pointer"
+                        className="w-12 h-12 rounded bg-surface-container hover:bg-live-red text-white text-2xl font-bold flex items-center justify-center transition-colors cursor-pointer border border-outline-variant/30"
                       >
                         -
                       </button>
                       <button
                         type="button"
                         onClick={() => setScoreA(scoreA + 1)}
-                        className="w-12 h-12 rounded bg-gold-accent hover:bg-white text-navy-deep font-display text-2xl flex items-center justify-center transition-colors cursor-pointer font-bold shadow"
+                        className="w-12 h-12 rounded bg-gold-accent hover:bg-white text-navy-deep text-2xl font-bold flex items-center justify-center transition-colors cursor-pointer"
                       >
                         +
                       </button>
+                    </div>
+
+                    {/* Quick increment chips */}
+                    <div className="flex justify-center gap-2 mt-4">
                       <button
                         type="button"
                         onClick={() => setScoreA(scoreA + 4)}
-                        className="px-3 h-12 rounded bg-surface-container-high hover:bg-white hover:text-navy-deep text-gold-accent font-caps-label text-xs font-bold transition-colors cursor-pointer"
-                        title="Add Boundary / +4"
+                        className="px-2.5 py-1 rounded bg-navy-mid text-gold-accent text-xs font-caps-label hover:bg-gold-accent hover:text-navy-deep transition-colors"
                       >
-                        +4
+                        +4 pts
                       </button>
                       <button
                         type="button"
                         onClick={() => setScoreA(scoreA + 6)}
-                        className="px-3 h-12 rounded bg-surface-container-high hover:bg-white hover:text-navy-deep text-gold-accent font-caps-label text-xs font-bold transition-colors cursor-pointer"
-                        title="Add Six / +6"
+                        className="px-2.5 py-1 rounded bg-navy-mid text-gold-accent text-xs font-caps-label hover:bg-gold-accent hover:text-navy-deep transition-colors"
                       >
-                        +6
+                        +6 pts
                       </button>
                     </div>
                   </div>
 
-                  {/* Team B */}
+                  {/* Competitor B */}
                   <div className="bg-surface-container-lowest p-5 rounded border border-outline-variant/30 text-center">
                     <div className="font-h2 text-base sm:text-lg uppercase text-white font-bold truncate">
-                      {selectedFixture.team_b?.name || 'Team B'}
+                      {competitorBName}
                     </div>
-                    <span className="font-caps-label text-xs text-gold-accent block mb-4">
-                      {selectedFixture.team_b?.batch?.code || 'Batch'}
+                    <span className="font-caps-label text-xs text-fog-text block mb-4">
+                      {competitorBBatch} {selectedFixture.player_b?.roll_no && `(${selectedFixture.player_b.roll_no})`}
                     </span>
 
                     {/* Big Score Display */}
-                    <div className="font-display text-6xl sm:text-7xl text-gold-accent my-3">
+                    <div className="font-display text-6xl sm:text-7xl text-white my-3 font-table-numeral">
                       {scoreB}
                     </div>
 
@@ -250,51 +292,69 @@ export default function AdminResultsPage() {
                       <button
                         type="button"
                         onClick={() => setScoreB(Math.max(0, scoreB - 1))}
-                        className="w-12 h-12 rounded bg-surface-container-high hover:bg-white hover:text-navy-deep text-white font-display text-2xl flex items-center justify-center transition-colors cursor-pointer"
+                        className="w-12 h-12 rounded bg-surface-container hover:bg-live-red text-white text-2xl font-bold flex items-center justify-center transition-colors cursor-pointer border border-outline-variant/30"
                       >
                         -
                       </button>
                       <button
                         type="button"
                         onClick={() => setScoreB(scoreB + 1)}
-                        className="w-12 h-12 rounded bg-gold-accent hover:bg-white text-navy-deep font-display text-2xl flex items-center justify-center transition-colors cursor-pointer font-bold shadow"
+                        className="w-12 h-12 rounded bg-gold-accent hover:bg-white text-navy-deep text-2xl font-bold flex items-center justify-center transition-colors cursor-pointer"
                       >
                         +
                       </button>
+                    </div>
+
+                    {/* Quick increment chips */}
+                    <div className="flex justify-center gap-2 mt-4">
                       <button
                         type="button"
                         onClick={() => setScoreB(scoreB + 4)}
-                        className="px-3 h-12 rounded bg-surface-container-high hover:bg-white hover:text-navy-deep text-gold-accent font-caps-label text-xs font-bold transition-colors cursor-pointer"
-                        title="Add Boundary / +4"
+                        className="px-2.5 py-1 rounded bg-navy-mid text-gold-accent text-xs font-caps-label hover:bg-gold-accent hover:text-navy-deep transition-colors"
                       >
-                        +4
+                        +4 pts
                       </button>
                       <button
                         type="button"
                         onClick={() => setScoreB(scoreB + 6)}
-                        className="px-3 h-12 rounded bg-surface-container-high hover:bg-white hover:text-navy-deep text-gold-accent font-caps-label text-xs font-bold transition-colors cursor-pointer"
-                        title="Add Six / +6"
+                        className="px-2.5 py-1 rounded bg-navy-mid text-gold-accent text-xs font-caps-label hover:bg-gold-accent hover:text-navy-deep transition-colors"
                       >
-                        +6
+                        +6 pts
                       </button>
                     </div>
                   </div>
                 </div>
 
                 {/* Match Status Selector & Submit */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-outline-variant/30">
-                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="p-4 bg-surface-container-lowest rounded border border-outline-variant/30 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
                     <label className="text-xs font-caps-label text-fog-text uppercase font-bold">
                       Match Status:
                     </label>
-                    <select
-                      value={status}
-                      onChange={(e) => setStatus(e.target.value as any)}
-                      className="px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-xs text-white font-caps-label uppercase focus:border-gold-accent focus:outline-none"
-                    >
-                      <option value="live">In Progress (Live)</option>
-                      <option value="completed">Final (Completed &amp; Points Awarded)</option>
-                    </select>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-xs text-white font-caps-label uppercase cursor-pointer">
+                        <input
+                          type="radio"
+                          name="status"
+                          value="live"
+                          checked={status === 'live'}
+                          onChange={() => setStatus('live')}
+                          className="accent-gold-accent"
+                        />
+                        <span>In Progress (Live)</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-white font-caps-label uppercase cursor-pointer">
+                        <input
+                          type="radio"
+                          name="status"
+                          value="completed"
+                          checked={status === 'completed'}
+                          onChange={() => setStatus('completed')}
+                          className="accent-win-green"
+                        />
+                        <span>Final / Completed</span>
+                      </label>
+                    </div>
                   </div>
 
                   <button
@@ -302,55 +362,62 @@ export default function AdminResultsPage() {
                     disabled={isSubmitting}
                     className="w-full sm:w-auto px-8 py-3 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors cursor-pointer shadow-lg disabled:opacity-50"
                   >
-                    {isSubmitting ? 'Saving...' : 'Publish Official Score'}
+                    {isSubmitting ? 'Saving...' : 'Save & Publish Score'}
                   </button>
                 </div>
               </form>
             )}
           </div>
 
-          {/* Quick Guide & Audit Rules (Spans 4 cols) */}
-          <div className="lg:col-span-4 flex flex-col gap-4">
-            <div className="p-5 bg-surface-container border border-outline-variant/20 rounded">
-              <h3 className="font-caps-label text-xs uppercase text-gold-accent font-bold mb-2 flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-base">verified</span>
-                POINTS SYSTEM RULES
+          {/* Quick Rules & Guidelines Panel (Spans 4 cols) */}
+          <div className="lg:col-span-4 flex flex-col gap-6">
+            <div className="bg-surface-container border border-outline-variant/30 rounded p-6 shadow-xl">
+              <h3 className="font-caps-label text-xs uppercase text-gold-accent font-bold mb-3 flex items-center gap-2">
+                <span className="material-symbols-outlined text-base">rule</span>
+                <span>Scoring Rules Matrix</span>
               </h3>
-              <p className="text-xs text-fog-text mb-3 leading-relaxed">
-                When a match is marked <strong>Completed</strong>, the points calculation engine (<code className="text-gold-accent">lib/points.ts</code>) triggers automatically and adds points to the winning batch:
-              </p>
-              <ul className="text-xs text-fog-text flex flex-col gap-1.5 font-table-numeral">
-                <li className="flex justify-between border-b border-outline-variant/10 pb-1">
-                  <span>Group Stage Win:</span>
-                  <span className="text-gold-accent font-bold">3 PTS</span>
+              <ul className="text-xs text-fog-text space-y-2.5 font-body">
+                <li className="flex items-start gap-2">
+                  <span className="text-gold-accent font-bold">&bull;</span>
+                  <span><strong>Group Win:</strong> 3 points awarded to the winning batch.</span>
                 </li>
-                <li className="flex justify-between border-b border-outline-variant/10 pb-1">
-                  <span>Semi-Final Win:</span>
-                  <span className="text-gold-accent font-bold">5 PTS</span>
+                <li className="flex items-start gap-2">
+                  <span className="text-gold-accent font-bold">&bull;</span>
+                  <span><strong>Semi-Final Win:</strong> 5 points awarded to the victor.</span>
                 </li>
-                <li className="flex justify-between border-b border-outline-variant/10 pb-1">
-                  <span>Final Runner-Up:</span>
-                  <span className="text-gold-accent font-bold">7 PTS</span>
+                <li className="flex items-start gap-2">
+                  <span className="text-gold-accent font-bold">&bull;</span>
+                  <span><strong>Final Runner-Up:</strong> 7 points awarded for 2nd place.</span>
                 </li>
-                <li className="flex justify-between">
-                  <span>Final Champion:</span>
-                  <span className="text-gold-accent font-bold">10 PTS</span>
+                <li className="flex items-start gap-2">
+                  <span className="text-gold-accent font-bold">&bull;</span>
+                  <span><strong>Final Winner:</strong> 10 points awarded to tournament champions.</span>
                 </li>
               </ul>
+            </div>
+
+            <div className="bg-navy-mid/60 border border-outline-variant/30 rounded p-5">
+              <div className="font-caps-label text-xs uppercase text-white font-bold mb-2 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-sm text-gold-accent">sync</span>
+                <span>Automatic Standings Engine</span>
+              </div>
+              <p className="text-xs text-fog-text leading-relaxed">
+                Saving score updates marked as <strong>Final / Completed</strong> automatically triggers the points calculation engine in <code className="text-gold-accent">lib/points.ts</code>, updating the unified leaderboard within ~20s.
+              </p>
             </div>
           </div>
         </div>
       ) : (
-        /* Individual Podium Finish Form */
-        <div className="max-w-2xl bg-surface-container border border-outline-variant/30 rounded p-6 shadow-xl">
-          <h3 className="font-display text-gold-accent uppercase text-xl mb-2">
+        /* ── INDIVIDUAL PODIUM TAB ── */
+        <div className="bg-surface-container border border-outline-variant/30 rounded p-6 max-w-2xl mx-auto shadow-xl">
+          <h2 className="font-display text-gold-accent uppercase text-xl mb-2">
             INDIVIDUAL SPORT PODIUM FINISH
-          </h3>
-          <p className="text-xs text-fog-text mb-6">
-            Record Gold, Silver, and Bronze medal winners for Badminton, Table Tennis, Chess, and Mini Marathon.
+          </h2>
+          <p className="font-body text-fog-text text-xs mb-6">
+            Award 1st, 2nd, or 3rd place finishes for Badminton, Table Tennis, Chess, or Marathon.
           </p>
 
-          <form onSubmit={handleSaveIndividual} className="flex flex-col gap-4">
+          <form onSubmit={handleSavePodium} className="space-y-4">
             <div>
               <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
                 Sport
@@ -358,7 +425,7 @@ export default function AdminResultsPage() {
               <select
                 value={podiumGameId}
                 onChange={(e) => setPodiumGameId(e.target.value)}
-                className="w-full px-3 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                className="w-full px-3.5 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
               >
                 {MOCK_GAMES.filter((g) => g.format === 'individual').map((g) => (
                   <option key={g.id} value={g.id}>
@@ -368,15 +435,15 @@ export default function AdminResultsPage() {
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
-                  Winning Batch
+                  Batch
                 </label>
                 <select
                   value={podiumBatchId}
                   onChange={(e) => setPodiumBatchId(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                  className="w-full px-3.5 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
                 >
                   {MOCK_BATCHES.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -388,12 +455,12 @@ export default function AdminResultsPage() {
 
               <div>
                 <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
-                  Category Gender
+                  Category
                 </label>
                 <select
                   value={podiumGender}
                   onChange={(e) => setPodiumGender(e.target.value as any)}
-                  className="w-full px-3 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                  className="w-full px-3.5 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
                 >
                   <option value="boys">Boys</option>
                   <option value="girls">Girls</option>
@@ -401,10 +468,10 @@ export default function AdminResultsPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
-                  Medal Position
+                  Podium Position
                 </label>
                 <select
                   value={podiumPosition}
@@ -413,23 +480,24 @@ export default function AdminResultsPage() {
                     setPodiumPosition(pos);
                     setPodiumPoints(pos === 1 ? 10 : pos === 2 ? 7 : 5);
                   }}
-                  className="w-full px-3 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                  className="w-full px-3.5 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
                 >
-                  <option value={1}>1st Place (Gold Medal)</option>
-                  <option value={2}>2nd Place (Silver Medal)</option>
-                  <option value={3}>3rd Place (Bronze Medal)</option>
+                  <option value={1}>1st Place &bull; Gold Medal</option>
+                  <option value={2}>2nd Place &bull; Silver Medal</option>
+                  <option value={3}>3rd Place &bull; Bronze Medal</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
-                  Points Awarded
+                  Points Credited
                 </label>
                 <input
                   type="number"
                   value={podiumPoints}
                   onChange={(e) => setPodiumPoints(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                  required
+                  className="w-full px-3.5 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-table-numeral"
                 />
               </div>
             </div>
@@ -437,9 +505,9 @@ export default function AdminResultsPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="mt-4 px-8 py-3 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors cursor-pointer shadow-lg disabled:opacity-50"
+              className="w-full mt-4 px-6 py-3 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors cursor-pointer shadow-lg disabled:opacity-50"
             >
-              {isSubmitting ? 'Recording...' : 'Award Podium Points'}
+              {isSubmitting ? 'Recording...' : 'Credit Podium Points'}
             </button>
           </form>
         </div>

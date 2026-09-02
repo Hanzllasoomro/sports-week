@@ -18,28 +18,81 @@ export async function saveResult(raw: unknown): Promise<ActionResult<Fixture>> {
 
   const { fixture_id, score_a, score_b, status, winner_team_id, winner_player_id } = parsed.data;
 
+  // Validate UUID format before inserting/updating in Postgres
+  const isValidUuid = (val?: string | null) =>
+    !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+  const cleanWinnerTeamId = isValidUuid(winner_team_id) ? winner_team_id : null;
+  const cleanWinnerPlayerId = isValidUuid(winner_player_id) ? winner_player_id : null;
+
   try {
     const supabase = await createServiceClient();
 
-    // Check for overwriting a completed fixture (confirmation required on client)
-    const { data: existing } = await supabase
+    // Check for existing fixture in database
+    let { data: existing } = await supabase
       .from('fixtures')
-      .select('status, team_a_id, team_b_id')
+      .select('id, status, team_a_id, team_b_id, game_id, stage')
       .eq('id', fixture_id)
       .single();
 
     if (!existing) {
-      return { error: { message: 'Fixture not found', code: 'NOT_FOUND' } };
+      // Check if it's one of our initial fixtures and auto-insert into Supabase
+      const { MOCK_FIXTURES } = await import('@/lib/mock-data');
+      const fallback = MOCK_FIXTURES.find((f) => f.id === fixture_id);
+
+      if (fallback) {
+        const { data: inserted, error: insertErr } = await supabase
+          .from('fixtures')
+          .insert({
+            id: fallback.id,
+            game_id: fallback.game_id,
+            stage: fallback.stage,
+            round: fallback.round,
+            scheduled_at: fallback.scheduled_at,
+            venue: fallback.venue,
+            status,
+            score_a,
+            score_b,
+            winner_team_id: cleanWinnerTeamId,
+            winner_player_id: cleanWinnerPlayerId,
+          })
+          .select()
+          .single();
+
+        if (insertErr) {
+          console.error('[saveResult auto-insert failed]', insertErr);
+        } else if (inserted) {
+          existing = inserted;
+        }
+      }
     }
 
-    const { data, error } = await supabase
-      .from('fixtures')
-      .update({ score_a, score_b, status, winner_team_id, winner_player_id })
-      .eq('id', fixture_id)
-      .select()
-      .single();
+    let data: any = existing;
 
-    if (error) throw error;
+    if (existing) {
+      const { data: updated, error: updateErr } = await supabase
+        .from('fixtures')
+        .update({
+          score_a,
+          score_b,
+          status,
+          winner_team_id: cleanWinnerTeamId,
+          winner_player_id: cleanWinnerPlayerId,
+        })
+        .eq('id', fixture_id)
+        .select()
+        .single();
+
+      if (updateErr) throw updateErr;
+      data = updated;
+    } else {
+      return {
+        error: {
+          message: `Fixture with ID ${fixture_id} not found in database. Please choose a scheduled match.`,
+          code: 'NOT_FOUND',
+        },
+      };
+    }
 
     // Recompute standings for affected batches
     const batchIds = new Set<string>();

@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { createFixture, updateFixture, deleteFixture } from '@/app/actions/fixtures';
-import type { FixtureWithRelations, Game } from '@/types';
+import { useState, useEffect } from 'react';
+import { scheduleMatch, updateFixture, deleteFixture } from '@/app/actions/fixtures';
+import type { FixtureWithRelations, Game, Batch } from '@/types';
 import { MOCK_GAMES, MOCK_BATCHES, MOCK_FIXTURES } from '@/lib/mock-data';
 import { fixtureTime, fixtureDate } from '@/lib/utils';
 
 export default function AdminFixturesPage() {
   const [fixtures, setFixtures] = useState<FixtureWithRelations[]>(MOCK_FIXTURES);
   const [games] = useState<Game[]>(MOCK_GAMES);
+  const [batches] = useState<Batch[]>(MOCK_BATCHES);
+  const [registeredPlayers, setRegisteredPlayers] = useState<any[]>([]);
 
   const [isCreating, setIsCreating] = useState(false);
   const [editingFixture, setEditingFixture] = useState<FixtureWithRelations | null>(null);
@@ -17,33 +19,109 @@ export default function AdminFixturesPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
-  // Form State for new fixture
-  const [formData, setFormData] = useState({
-    game_id: MOCK_GAMES[0].id,
-    stage: 'group' as 'group' | 'semifinal' | 'final',
-    round: 'Match 1',
-    scheduled_at: '2026-09-08T10:00:00+05:00',
-    venue: 'MUET Gymnasium',
-  });
+  // Form State for dynamic match scheduling
+  const [gameId, setGameId] = useState<string>(MOCK_GAMES[0].id);
+  const [stage, setStage] = useState<'group' | 'semifinal' | 'final' | 'friendly'>('group');
+  const [round, setRound] = useState<string>('Match 1');
+  const [scheduledAt, setScheduledAt] = useState<string>('2026-09-08T10:00:00+05:00');
+  const [venue, setVenue] = useState<string>('MUET Gymnasium Arena');
+  const [gender, setGender] = useState<'boys' | 'girls'>('boys');
 
-  async function handleCreate(e: React.FormEvent) {
+  // Team Form Fields
+  const [batchAId, setBatchAId] = useState<string>(MOCK_BATCHES[2].id); // 24SW
+  const [teamAName, setTeamAName] = useState<string>('24SW Strikers');
+  const [batchBId, setBatchBId] = useState<string>(MOCK_BATCHES[5].id); // 23AI
+  const [teamBName, setTeamBName] = useState<string>('23AI Titans');
+
+  // Individual Form Fields
+  const [playerAId, setPlayerAId] = useState<string>('');
+  const [playerAName, setPlayerAName] = useState<string>('');
+  const [playerARollNo, setPlayerARollNo] = useState<string>('');
+
+  const [playerBId, setPlayerBId] = useState<string>('');
+  const [playerBName, setPlayerBName] = useState<string>('');
+  const [playerBRollNo, setPlayerBRollNo] = useState<string>('');
+
+  const selectedGame = games.find((g) => g.id === gameId) || games[0];
+  const isTeamSport = selectedGame.format === 'team';
+
+  // Load real fixtures and players on mount
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [fixRes, playRes] = await Promise.all([
+          fetch('/api/fixtures'),
+          fetch('/api/players'),
+        ]);
+
+        if (fixRes.ok) {
+          const fixData = await fixRes.json();
+          if (Array.isArray(fixData) && fixData.length > 0) {
+            setFixtures(fixData);
+          }
+        }
+
+        if (playRes.ok) {
+          const playData = await playRes.json();
+          if (Array.isArray(playData)) {
+            setRegisteredPlayers(playData);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load real data', err);
+      }
+    }
+    loadData();
+  }, []);
+
+  // Update default names when game or batch changes
+  useEffect(() => {
+    const batchA = batches.find((b) => b.id === batchAId);
+    const batchB = batches.find((b) => b.id === batchBId);
+    if (isTeamSport) {
+      setTeamAName(`${batchA?.code || 'Batch A'} ${selectedGame.name}`);
+      setTeamBName(`${batchB?.code || 'Batch B'} ${selectedGame.name}`);
+    }
+  }, [gameId, batchAId, batchBId, isTeamSport]);
+
+  async function handleScheduleMatch(e: React.FormEvent) {
     e.preventDefault();
-    setFeedbackMessage('Scheduling fixture...');
+    setFeedbackMessage('Scheduling match in database...');
 
-    const res = await createFixture(formData);
+    const payload: any = {
+      game_id: gameId,
+      stage,
+      round,
+      scheduled_at: scheduledAt,
+      venue,
+      gender,
+    };
+
+    if (isTeamSport) {
+      payload.team_a_name = teamAName;
+      payload.team_a_batch_id = batchAId;
+      payload.team_b_name = teamBName;
+      payload.team_b_batch_id = batchBId;
+    } else {
+      payload.player_a_name = playerAName || 'Athlete A';
+      payload.player_a_roll_no = playerARollNo;
+      payload.player_a_batch_id = batchAId;
+
+      payload.player_b_name = playerBName || 'Athlete B';
+      payload.player_b_roll_no = playerBRollNo;
+      payload.player_b_batch_id = batchBId;
+    }
+
+    const res = await scheduleMatch(payload);
+
     if (res.error) {
       setFeedbackMessage(`Error: ${res.error.message}`);
     } else {
-      setFeedbackMessage('Fixture successfully scheduled!');
+      setFeedbackMessage('Match successfully scheduled and registered in database!');
       setIsCreating(false);
-      const selectedGame = games.find((g) => g.id === formData.game_id)!;
-      const newFixture: FixtureWithRelations = {
-        id: (res.data as any)?.id || `f-new-${Date.now()}`,
-        ...formData,
-        status: 'scheduled',
-        game: selectedGame,
-      };
-      setFixtures([newFixture, ...fixtures]);
+      if (res.data) {
+        setFixtures([res.data, ...fixtures]);
+      }
     }
     setTimeout(() => setFeedbackMessage(null), 3500);
   }
@@ -120,7 +198,7 @@ export default function AdminFixturesPage() {
             FIXTURE &amp; SCHEDULE MANAGER
           </h1>
           <p className="font-body text-fog-text text-xs sm:text-sm mt-1">
-            Schedule tournament matches, edit timings &amp; venues, update statuses, or cancel fixtures
+            Dynamic match scheduling for Team Squads and Individual Athletes
           </p>
         </div>
 
@@ -135,7 +213,7 @@ export default function AdminFixturesPage() {
           <span className="material-symbols-outlined text-base">
             {isCreating ? 'close' : 'add'}
           </span>
-          <span>{isCreating ? 'Cancel' : 'Schedule Match'}</span>
+          <span>{isCreating ? 'Cancel' : 'Schedule New Match'}</span>
         </button>
       </div>
 
@@ -145,23 +223,36 @@ export default function AdminFixturesPage() {
         </div>
       )}
 
-      {/* ── Create Fixture Form ── */}
+      {/* ── Dynamic Schedule Fixture Form ── */}
       {isCreating && (
         <form
-          onSubmit={handleCreate}
-          className="mb-8 p-6 bg-surface-container border border-gold-accent/40 rounded shadow-xl"
+          onSubmit={handleScheduleMatch}
+          className="mb-8 p-6 bg-surface-container border border-gold-accent rounded shadow-xl"
         >
-          <h3 className="font-display text-gold-accent uppercase text-lg mb-4">
-            SCHEDULE NEW TOURNAMENT MATCH
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+          <div className="flex items-center justify-between border-b border-outline-variant/30 pb-3 mb-4">
+            <h3 className="font-display text-gold-accent uppercase text-lg">
+              SCHEDULE MATCH &bull; {selectedGame.name} ({selectedGame.format.toUpperCase()})
+            </h3>
+            <span
+              className={`px-2.5 py-0.5 rounded text-xs font-caps-label uppercase font-bold ${
+                isTeamSport
+                  ? 'bg-gold-accent/20 text-gold-accent border border-gold-accent/40'
+                  : 'bg-primary/20 text-primary border border-primary/40'
+              }`}
+            >
+              {isTeamSport ? 'Team Match Setup' : 'Individual Singles Setup'}
+            </span>
+          </div>
+
+          {/* Core Match Info */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div>
               <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
                 Sport
               </label>
               <select
-                value={formData.game_id}
-                onChange={(e) => setFormData({ ...formData, game_id: e.target.value })}
+                value={gameId}
+                onChange={(e) => setGameId(e.target.value)}
                 className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
               >
                 {games.map((g) => (
@@ -177,13 +268,14 @@ export default function AdminFixturesPage() {
                 Tournament Stage
               </label>
               <select
-                value={formData.stage}
-                onChange={(e) => setFormData({ ...formData, stage: e.target.value as any })}
+                value={stage}
+                onChange={(e) => setStage(e.target.value as any)}
                 className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
               >
                 <option value="group">Group / League Stage</option>
                 <option value="semifinal">Semi-Final</option>
                 <option value="final">Championship Final</option>
+                <option value="friendly">Friendly / Exhibition</option>
               </select>
             </div>
 
@@ -193,9 +285,8 @@ export default function AdminFixturesPage() {
               </label>
               <input
                 type="text"
-                placeholder="e.g. Group B or Match 3"
-                value={formData.round}
-                onChange={(e) => setFormData({ ...formData, round: e.target.value })}
+                value={round}
+                onChange={(e) => setRound(e.target.value)}
                 required
                 className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
               />
@@ -203,13 +294,26 @@ export default function AdminFixturesPage() {
 
             <div>
               <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
-                Date &amp; Time
+                Category
+              </label>
+              <select
+                value={gender}
+                onChange={(e) => setGender(e.target.value as any)}
+                className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+              >
+                <option value="boys">Boys</option>
+                <option value="girls">Girls</option>
+              </select>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                Scheduled Date &amp; Time
               </label>
               <input
                 type="text"
-                placeholder="YYYY-MM-DDTHH:MM:SS+05:00"
-                value={formData.scheduled_at}
-                onChange={(e) => setFormData({ ...formData, scheduled_at: e.target.value })}
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
                 required
                 className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-mono"
               />
@@ -221,19 +325,267 @@ export default function AdminFixturesPage() {
               </label>
               <input
                 type="text"
-                value={formData.venue}
-                onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
+                value={venue}
+                onChange={(e) => setVenue(e.target.value)}
                 required
                 className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
               />
             </div>
           </div>
 
+          {/* Dynamic Competitors Setup */}
+          {isTeamSport ? (
+            /* ── TEAM SPORT SETUP ── */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-navy-mid/40 rounded border border-outline-variant/30 mb-6">
+              {/* Team A */}
+              <div className="p-4 bg-surface-container-lowest rounded border border-gold-accent/30">
+                <div className="font-caps-label text-xs uppercase text-gold-accent font-bold mb-3 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm">shield</span>
+                  <span>TEAM / SQUAD A</span>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                      Academic Batch
+                    </label>
+                    <select
+                      value={batchAId}
+                      onChange={(e) => setBatchAId(e.target.value)}
+                      className="w-full px-3 py-2 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                    >
+                      {batches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.code} ({b.department?.code || 'Dept'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                      Squad / Team Name
+                    </label>
+                    <input
+                      type="text"
+                      value={teamAName}
+                      onChange={(e) => setTeamAName(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Team B */}
+              <div className="p-4 bg-surface-container-lowest rounded border border-outline-variant/30">
+                <div className="font-caps-label text-xs uppercase text-fog-text font-bold mb-3 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm">shield</span>
+                  <span>TEAM / SQUAD B</span>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                      Academic Batch
+                    </label>
+                    <select
+                      value={batchBId}
+                      onChange={(e) => setBatchBId(e.target.value)}
+                      className="w-full px-3 py-2 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                    >
+                      {batches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.code} ({b.department?.code || 'Dept'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                      Squad / Team Name
+                    </label>
+                    <input
+                      type="text"
+                      value={teamBName}
+                      onChange={(e) => setTeamBName(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* ── INDIVIDUAL SPORT SETUP ── */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-navy-mid/40 rounded border border-outline-variant/30 mb-6">
+              {/* Athlete A */}
+              <div className="p-4 bg-surface-container-lowest rounded border border-primary/40">
+                <div className="font-caps-label text-xs uppercase text-primary font-bold mb-3 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm">person</span>
+                  <span>ATHLETE / PLAYER A</span>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                      Batch
+                    </label>
+                    <select
+                      value={batchAId}
+                      onChange={(e) => setBatchAId(e.target.value)}
+                      className="w-full px-3 py-2 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                    >
+                      {batches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.code} ({b.department?.code || 'Dept'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {registeredPlayers.filter((p) => p.batch_id === batchAId).length > 0 && (
+                    <div>
+                      <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                        Select from Registered Athletes
+                      </label>
+                      <select
+                        onChange={(e) => {
+                          const p = registeredPlayers.find((x) => x.id === e.target.value);
+                          if (p) {
+                            setPlayerAName(p.name);
+                            setPlayerARollNo(p.roll_no || '');
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                      >
+                        <option value="">-- Choose registered player or type below --</option>
+                        {registeredPlayers
+                          .filter((p) => p.batch_id === batchAId)
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.roll_no || 'No Roll No'})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                        Full Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Zaid Khan"
+                        value={playerAName}
+                        onChange={(e) => setPlayerAName(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                        Roll Number
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 24SW01"
+                        value={playerARollNo}
+                        onChange={(e) => setPlayerARollNo(e.target.value)}
+                        className="w-full px-3 py-2 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Athlete B */}
+              <div className="p-4 bg-surface-container-lowest rounded border border-outline-variant/30">
+                <div className="font-caps-label text-xs uppercase text-fog-text font-bold mb-3 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm">person</span>
+                  <span>ATHLETE / PLAYER B</span>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                      Batch
+                    </label>
+                    <select
+                      value={batchBId}
+                      onChange={(e) => setBatchBId(e.target.value)}
+                      className="w-full px-3 py-2 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                    >
+                      {batches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.code} ({b.department?.code || 'Dept'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {registeredPlayers.filter((p) => p.batch_id === batchBId).length > 0 && (
+                    <div>
+                      <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                        Select from Registered Athletes
+                      </label>
+                      <select
+                        onChange={(e) => {
+                          const p = registeredPlayers.find((x) => x.id === e.target.value);
+                          if (p) {
+                            setPlayerBName(p.name);
+                            setPlayerBRollNo(p.roll_no || '');
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                      >
+                        <option value="">-- Choose registered player or type below --</option>
+                        {registeredPlayers
+                          .filter((p) => p.batch_id === batchBId)
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.roll_no || 'No Roll No'})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                        Full Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Bilal Ahmed"
+                        value={playerBName}
+                        onChange={(e) => setPlayerBName(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                        Roll Number
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 23AI15"
+                        value={playerBRollNo}
+                        onChange={(e) => setPlayerBRollNo(e.target.value)}
+                        className="w-full px-3 py-2 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <button
             type="submit"
-            className="px-6 py-2.5 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors cursor-pointer"
+            className="px-6 py-2.5 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors cursor-pointer flex items-center gap-2"
           >
-            Confirm &amp; Schedule
+            <span className="material-symbols-outlined text-base">event_available</span>
+            <span>Confirm &amp; Register Match</span>
           </button>
         </form>
       )}

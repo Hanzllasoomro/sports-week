@@ -3,33 +3,33 @@ import { z } from 'zod';
 // ─── Fixture schemas ─────────────────────────────────────────────────────────
 
 export const FixtureCreateSchema = z.object({
-  game_id:      z.string().uuid(),
+  game_id:      z.string(),
   stage:        z.enum(['group', 'semifinal', 'final', 'friendly']),
   round:        z.string().optional(),
-  team_a_id:    z.string().uuid().optional(),
-  team_b_id:    z.string().uuid().optional(),
-  player_a_id:  z.string().uuid().optional(),
-  player_b_id:  z.string().uuid().optional(),
-  scheduled_at: z.string().datetime(),
-  venue:        z.string().max(100).optional(),
+  team_a_id:    z.string().optional().nullable(),
+  team_b_id:    z.string().optional().nullable(),
+  player_a_id:  z.string().optional().nullable(),
+  player_b_id:  z.string().optional().nullable(),
+  scheduled_at: z.string(),
+  venue:        z.string().max(100).optional().nullable(),
 });
 
 export const FixtureUpdateSchema = FixtureCreateSchema.partial().extend({
-  id:       z.string().uuid(),
+  id:       z.string(),
   status:   z.enum(['scheduled', 'live', 'completed', 'cancelled']).optional(),
   score_a:  z.number().int().min(0).optional(),
   score_b:  z.number().int().min(0).optional(),
-  winner_team_id:   z.string().uuid().optional().nullable(),
-  winner_player_id: z.string().uuid().optional().nullable(),
+  winner_team_id:   z.string().optional().nullable(),
+  winner_player_id: z.string().optional().nullable(),
 });
 
 export const ScoreEntrySchema = z.object({
-  fixture_id:       z.string().uuid(),
+  fixture_id:       z.string(),
   score_a:          z.number({ invalid_type_error: 'Score must be a whole number' }).int().min(0),
   score_b:          z.number({ invalid_type_error: 'Score must be a whole number' }).int().min(0),
-  status:           z.enum(['live', 'completed']),
-  winner_team_id:   z.string().uuid().optional().nullable(),
-  winner_player_id: z.string().uuid().optional().nullable(),
+  status:           z.enum(['scheduled', 'live', 'completed', 'cancelled']),
+  winner_team_id:   z.string().optional().nullable(),
+  winner_player_id: z.string().optional().nullable(),
 });
 
 export type FixtureCreateInput = z.infer<typeof FixtureCreateSchema>;
