@@ -179,7 +179,24 @@ export async function getTeams(): Promise<any[]> {
   } catch {
     // ignore
   }
-  return [];
+
+  // Fallback initial squads
+  const initialSquads = [
+    { id: 't-24sw-cric', name: '24SW Strikers', batch_id: 'b1000000-0000-0000-0000-000000000003', gender: 'boys' },
+    { id: 't-23ai-cric', name: '23AI Titans', batch_id: 'b1000000-0000-0000-0000-000000000006', gender: 'boys' },
+    { id: 't-23sw-fut', name: '23SW United', batch_id: 'b1000000-0000-0000-0000-000000000002', gender: 'boys' },
+    { id: 't-24ai-fut', name: '24AI FC', batch_id: 'b1000000-0000-0000-0000-000000000007', gender: 'boys' },
+    { id: 't-24sw-tb', name: '24SW Phoenix', batch_id: 'b1000000-0000-0000-0000-000000000003', gender: 'girls' },
+    { id: 't-22sw-tb', name: '22SW Legends', batch_id: 'b1000000-0000-0000-0000-000000000001', gender: 'girls' },
+    { id: 't-25ai-vb', name: '25AI Spikers', batch_id: 'b1000000-0000-0000-0000-000000000008', gender: 'boys' },
+    { id: 't-26sw-vb', name: '26SW Challengers', batch_id: 'b1000000-0000-0000-0000-000000000005', gender: 'boys' },
+    { id: 't-23ai-tow', name: '23AI Powerhouse', batch_id: 'b1000000-0000-0000-0000-000000000006', gender: 'boys' },
+    { id: 't-22sw-tow', name: '22SW Titans', batch_id: 'b1000000-0000-0000-0000-000000000001', gender: 'boys' },
+    { id: 't-25sw-ludo', name: '25SW Rollers', batch_id: 'b1000000-0000-0000-0000-000000000004', gender: 'boys' },
+    { id: 't-23sw-ludo', name: '23SW Masters', batch_id: 'b1000000-0000-0000-0000-000000000002', gender: 'boys' },
+  ];
+
+  return initialSquads;
 }
 
 export async function getPlayers(): Promise<any[]> {
