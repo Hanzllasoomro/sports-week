@@ -92,7 +92,7 @@ export function LiveScoresView({ initialFixtures, games }: LiveScoresViewProps) 
             {liveMatches.length} match{liveMatches.length === 1 ? '' : 'es'} in progress
           </span>
           <span className="text-outline-variant hidden sm:inline">&bull;</span>
-          <span className="hidden sm:inline">
+          <span className="hidden sm:inline" suppressHydrationWarning>
             Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </span>
         </div>
