@@ -1,0 +1,314 @@
+/* ─── Google Fonts (must be first per CSS spec) ────────── */
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Manrope:wght@400;500;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ─── Design Tokens (from design.md) ───────────────────── */
+@theme inline {
+  /* Colors */
+  --color-navy-deep:               #0A1240;
+  --color-navy-mid:                #142868;
+  --color-cream:                   #F2E8CE;
+  --color-gold-accent:             #E8B44A;
+  --color-fog-text:                #C7CCE0;
+  --color-live-red:                #E8483B;
+  --color-win-green:               #4CAF6B;
+
+  /* Material color tokens (from Stitch screens) */
+  --color-background:              #131316;
+  --color-surface:                 #131316;
+  --color-surface-dim:             #131316;
+  --color-surface-bright:          #39393c;
+  --color-surface-container-lowest: #0e0e11;
+  --color-surface-container-low:   #1b1b1f;
+  --color-surface-container:       #1f1f23;
+  --color-surface-container-high:  #2a2a2d;
+  --color-surface-container-highest: #353438;
+  --color-surface-variant:         #353438;
+  --color-surface-tint:            #bcc3fa;
+  --color-on-surface:              #e4e1e6;
+  --color-on-surface-variant:      #c7c5d0;
+  --color-on-background:           #e4e1e6;
+  --color-outline:                 #90909a;
+  --color-outline-variant:         #46464f;
+  --color-primary:                 #bcc3fa;
+  --color-primary-fixed:           #dee0ff;
+  --color-primary-fixed-dim:       #bcc3fa;
+  --color-primary-container:       #0a1240;
+  --color-on-primary:              #252d5a;
+  --color-on-primary-fixed:        #0f1744;
+  --color-on-primary-fixed-variant: #3c4372;
+  --color-on-primary-container:    #767db0;
+  --color-inverse-primary:         #545b8c;
+  --color-secondary:               #cfc6ad;
+  --color-secondary-fixed:         #ece2c8;
+  --color-secondary-fixed-dim:     #cfc6ad;
+  --color-secondary-container:     #4c4734;
+  --color-on-secondary:            #35301f;
+  --color-on-secondary-fixed:      #201b0c;
+  --color-on-secondary-fixed-variant: #4c4734;
+  --color-on-secondary-container:  #bdb59c;
+  --color-tertiary:                #fcb699;
+  --color-tertiary-fixed:          #ffdbcd;
+  --color-tertiary-fixed-dim:      #fcb699;
+  --color-tertiary-container:      #2f0c00;
+  --color-on-tertiary:             #4f2410;
+  --color-on-tertiary-fixed:       #351001;
+  --color-on-tertiary-fixed-variant: #6a3a24;
+  --color-on-tertiary-container:   #ae7259;
+  --color-error:                   #ffb4ab;
+  --color-error-container:         #93000a;
+  --color-on-error:                #690005;
+  --color-on-error-container:      #ffdad6;
+  --color-inverse-surface:         #e4e1e6;
+  --color-inverse-on-surface:      #303034;
+
+  /* Typography — Font Families */
+  --font-display:    'Anton', sans-serif;
+  --font-body:       'Manrope', sans-serif;
+  --font-h1:         'Anton', sans-serif;
+  --font-h1-mobile:  'Anton', sans-serif;
+  --font-h2:         'Manrope', sans-serif;
+  --font-hero-display: 'Anton', sans-serif;
+  --font-hero-display-mobile: 'Anton', sans-serif;
+  --font-caps-label: 'Manrope', sans-serif;
+  --font-table-numeral: 'Manrope', sans-serif;
+  --font-body-lg:    'Manrope', sans-serif;
+
+  /* Spacing */
+  --spacing-gutter:        1rem;
+  --spacing-row-gap:       0.5rem;
+  --spacing-margin-main:   2rem;
+  --spacing-margin-mobile: 1rem;
+  --spacing-section-gap:   4rem;
+
+  /* Border radius */
+  --radius:    0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --font-heading:               var(--font-sans);
+  --font-sans:               var(--font-sans);
+  --color-sidebar-ring:               var(--sidebar-ring);
+  --color-sidebar-border:               var(--sidebar-border);
+  --color-sidebar-accent-foreground:               var(--sidebar-accent-foreground);
+  --color-sidebar-accent:               var(--sidebar-accent);
+  --color-sidebar-primary-foreground:               var(--sidebar-primary-foreground);
+  --color-sidebar-primary:               var(--sidebar-primary);
+  --color-sidebar-foreground:               var(--sidebar-foreground);
+  --color-sidebar:               var(--sidebar);
+  --color-chart-5:               var(--chart-5);
+  --color-chart-4:               var(--chart-4);
+  --color-chart-3:               var(--chart-3);
+  --color-chart-2:               var(--chart-2);
+  --color-chart-1:               var(--chart-1);
+  --color-ring:               var(--ring);
+  --color-input:               var(--input);
+  --color-border:               var(--border);
+  --color-destructive:               var(--destructive);
+  --color-accent-foreground:               var(--accent-foreground);
+  --color-accent:               var(--accent);
+  --color-muted-foreground:               var(--muted-foreground);
+  --color-muted:               var(--muted);
+  --color-secondary-foreground:               var(--secondary-foreground);
+  --color-primary-foreground:               var(--primary-foreground);
+  --color-popover-foreground:               var(--popover-foreground);
+  --color-popover:               var(--popover);
+  --color-card-foreground:               var(--card-foreground);
+  --color-card:               var(--card);
+  --color-foreground:               var(--foreground);
+  --radius-sm:               calc(var(--radius) * 0.6);
+  --radius-md:               calc(var(--radius) * 0.8);
+  --radius-2xl:               calc(var(--radius) * 1.8);
+  --radius-3xl:               calc(var(--radius) * 2.2);
+  --radius-4xl:               calc(var(--radius) * 2.6);
+}
+
+/* ─── Base ──────────────────────────────────────────────── */
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-on-surface);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ─── Typography helpers ─────────────────────────────────── */
+.font-display       { font-family: var(--font-display); }
+.font-body          { font-family: var(--font-body); }
+.font-h1            { font-family: var(--font-h1); font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 400; line-height: 1.2; }
+.font-h1-mobile     { font-family: var(--font-h1-mobile); font-size: 2rem; font-weight: 400; line-height: 1.2; }
+.font-hero-display  { font-family: var(--font-hero-display); font-size: clamp(3rem, 9vw, 7rem); font-weight: 400; line-height: 1.1; }
+.font-hero-display-mobile { font-family: var(--font-hero-display-mobile); font-size: 3rem; font-weight: 400; line-height: 1.1; }
+.font-h2            { font-family: var(--font-h2); font-size: 2rem; font-weight: 800; line-height: 1.3; }
+.font-caps-label    { font-family: var(--font-caps-label); font-size: 0.875rem; font-weight: 800; line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; }
+.font-table-numeral { font-family: var(--font-table-numeral); font-size: 1rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.font-body-lg       { font-family: var(--font-body-lg); font-size: 1.125rem; font-weight: 500; line-height: 1.6; }
+
+/* Text size helpers matching Stitch token names */
+.text-h1            { font-size: 3.5rem; line-height: 1.2; }
+.text-h1-mobile     { font-size: 2rem;   line-height: 1.2; }
+.text-hero-display  { font-size: clamp(4rem, 9vw, 7rem); line-height: 1.1; }
+.text-hero-display-mobile { font-size: 3rem; line-height: 1.1; }
+.text-h2            { font-size: 2rem;   line-height: 1.3; }
+.text-caps-label    { font-size: 0.875rem; letter-spacing: 0.05em; }
+.text-table-numeral { font-size: 1rem; }
+.text-body          { font-size: 1rem;   line-height: 1.6; }
+.text-body-lg       { font-size: 1.125rem; line-height: 1.6; }
+
+/* ─── Animations ─────────────────────────────────────────── */
+@keyframes pulse-live {
+  0%   { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(232, 72, 59, 0.7); }
+  70%  { transform: scale(1);   box-shadow: 0 0 0 6px rgba(232, 72, 59, 0); }
+  100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(232, 72, 59, 0); }
+}
+
+@keyframes ping-live {
+  0%   { transform: scale(1); opacity: 0.75; }
+  75%, 100% { transform: scale(2); opacity: 0; }
+}
+
+.pulse-live {
+  animation: pulse-live 1.25s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+.animate-ping-live {
+  animation: ping-live 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* ─── Ghost background utility ───────────────────────────── */
+.ghost-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-navy-deep); }
+::-webkit-scrollbar-thumb { background: var(--color-navy-mid); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-on-primary-fixed-variant); }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ─── Hairline borders (admin ui) ───────────────────────── */
+.hairline-b { border-bottom: 1px solid rgba(199, 204, 224, 0.1); }
+.hairline-t { border-top:    1px solid rgba(199, 204, 224, 0.1); }
+.hairline-r { border-right:  1px solid rgba(199, 204, 224, 0.1); }
+
+/* ─── Focus ring (gold, per design.md accessibility) ───── */
+*:focus-visible {
+  outline: 2px solid var(--color-gold-accent);
+  outline-offset: 2px;
+}
+
+/* ─── Material Symbols icon font ────────────────────────── */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
+:root {
+  --background:               oklch(1 0 0);
+  --foreground:               oklch(0.145 0 0);
+  --card:               oklch(1 0 0);
+  --card-foreground:               oklch(0.145 0 0);
+  --popover:               oklch(1 0 0);
+  --popover-foreground:               oklch(0.145 0 0);
+  --primary:               oklch(0.205 0 0);
+  --primary-foreground:               oklch(0.985 0 0);
+  --secondary:               oklch(0.97 0 0);
+  --secondary-foreground:               oklch(0.205 0 0);
+  --muted:               oklch(0.97 0 0);
+  --muted-foreground:               oklch(0.556 0 0);
+  --accent:               oklch(0.97 0 0);
+  --accent-foreground:               oklch(0.205 0 0);
+  --destructive:               oklch(0.577 0.245 27.325);
+  --border:               oklch(0.922 0 0);
+  --input:               oklch(0.922 0 0);
+  --ring:               oklch(0.708 0 0);
+  --chart-1:               oklch(0.87 0 0);
+  --chart-2:               oklch(0.556 0 0);
+  --chart-3:               oklch(0.439 0 0);
+  --chart-4:               oklch(0.371 0 0);
+  --chart-5:               oklch(0.269 0 0);
+  --radius:               0.625rem;
+  --sidebar:               oklch(0.985 0 0);
+  --sidebar-foreground:               oklch(0.145 0 0);
+  --sidebar-primary:               oklch(0.205 0 0);
+  --sidebar-primary-foreground:               oklch(0.985 0 0);
+  --sidebar-accent:               oklch(0.97 0 0);
+  --sidebar-accent-foreground:               oklch(0.205 0 0);
+  --sidebar-border:               oklch(0.922 0 0);
+  --sidebar-ring:               oklch(0.708 0 0);
+}
+
+.dark {
+  --background:               oklch(0.145 0 0);
+  --foreground:               oklch(0.985 0 0);
+  --card:               oklch(0.205 0 0);
+  --card-foreground:               oklch(0.985 0 0);
+  --popover:               oklch(0.205 0 0);
+  --popover-foreground:               oklch(0.985 0 0);
+  --primary:               oklch(0.922 0 0);
+  --primary-foreground:               oklch(0.205 0 0);
+  --secondary:               oklch(0.269 0 0);
+  --secondary-foreground:               oklch(0.985 0 0);
+  --muted:               oklch(0.269 0 0);
+  --muted-foreground:               oklch(0.708 0 0);
+  --accent:               oklch(0.269 0 0);
+  --accent-foreground:               oklch(0.985 0 0);
+  --destructive:               oklch(0.704 0.191 22.216);
+  --border:               oklch(1 0 0 / 10%);
+  --input:               oklch(1 0 0 / 15%);
+  --ring:               oklch(0.556 0 0);
+  --chart-1:               oklch(0.87 0 0);
+  --chart-2:               oklch(0.556 0 0);
+  --chart-3:               oklch(0.439 0 0);
+  --chart-4:               oklch(0.371 0 0);
+  --chart-5:               oklch(0.269 0 0);
+  --sidebar:               oklch(0.205 0 0);
+  --sidebar-foreground:               oklch(0.985 0 0);
+  --sidebar-primary:               oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground:               oklch(0.985 0 0);
+  --sidebar-accent:               oklch(0.269 0 0);
+  --sidebar-accent-foreground:               oklch(0.985 0 0);
+  --sidebar-border:               oklch(1 0 0 / 10%);
+  --sidebar-ring:               oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
