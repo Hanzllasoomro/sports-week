@@ -5,14 +5,7 @@ import { createPlayer, updatePlayer, deletePlayer } from '@/app/actions/roster';
 import { MOCK_BATCHES } from '@/lib/mock-data';
 
 export default function AdminPlayersPage() {
-  const [players, setPlayers] = useState<any[]>([
-    { id: 'p-1', name: 'Bilal Ahmed', roll_no: '24SW01', batch_id: MOCK_BATCHES[2].id, batch: '24SW', gender: 'boys' },
-    { id: 'p-2', name: 'Zaid Khan', roll_no: '23AI05', batch_id: MOCK_BATCHES[5].id, batch: '23AI', gender: 'boys' },
-    { id: 'p-3', name: 'Ayesha Raza', roll_no: '24SW44', batch_id: MOCK_BATCHES[2].id, batch: '24SW', gender: 'girls' },
-    { id: 'p-4', name: 'Maryam Soomro', roll_no: '23AI28', batch_id: MOCK_BATCHES[5].id, batch: '23AI', gender: 'girls' },
-    { id: 'p-5', name: 'Shahmeer Tariq', roll_no: '24SW15', batch_id: MOCK_BATCHES[2].id, batch: '24SW', gender: 'boys' },
-    { id: 'p-6', name: 'Usman Ali', roll_no: '23AI12', batch_id: MOCK_BATCHES[5].id, batch: '23AI', gender: 'boys' },
-  ]);
+  const [players, setPlayers] = useState<any[]>([]);
 
   const [isAdding, setIsAdding] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<any | null>(null);
@@ -34,7 +27,7 @@ export default function AdminPlayersPage() {
         const res = await fetch('/api/players');
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
+          if (Array.isArray(data)) {
             setPlayers(
               data.map((p: any) => ({
                 id: p.id,

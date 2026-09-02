@@ -30,7 +30,7 @@ export async function getStandings(): Promise<StandingRow[]> {
       .select('batch_id, total_points, breakdown, batch:batches(*, department:departments(*))')
       .order('total_points', { ascending: false });
 
-    if (!error && data && data.length > 0 && data.some((d: any) => d.total_points > 0)) {
+    if (!error && data && data.length > 0) {
       return data.map((item: any, idx: number) => ({
         rank: idx + 1,
         batch: item.batch,
@@ -64,7 +64,7 @@ export async function getFixtures(day?: 1 | 2 | 3, status?: string): Promise<Fix
     }
 
     const { data, error } = await query;
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       return data as FixtureWithRelations[];
     }
   } catch {
@@ -171,32 +171,15 @@ export async function getTeams(): Promise<any[]> {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('teams')
-      .select('*, batch:batches(*)')
+      .select('*, batch:batches(*), game:games(*)')
       .order('name');
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       return data;
     }
   } catch {
     // ignore
   }
-
-  // Fallback initial squads
-  const initialSquads = [
-    { id: 't-24sw-cric', name: '24SW Strikers', batch_id: 'b1000000-0000-0000-0000-000000000003', gender: 'boys' },
-    { id: 't-23ai-cric', name: '23AI Titans', batch_id: 'b1000000-0000-0000-0000-000000000006', gender: 'boys' },
-    { id: 't-23sw-fut', name: '23SW United', batch_id: 'b1000000-0000-0000-0000-000000000002', gender: 'boys' },
-    { id: 't-24ai-fut', name: '24AI FC', batch_id: 'b1000000-0000-0000-0000-000000000007', gender: 'boys' },
-    { id: 't-24sw-tb', name: '24SW Phoenix', batch_id: 'b1000000-0000-0000-0000-000000000003', gender: 'girls' },
-    { id: 't-22sw-tb', name: '22SW Legends', batch_id: 'b1000000-0000-0000-0000-000000000001', gender: 'girls' },
-    { id: 't-25ai-vb', name: '25AI Spikers', batch_id: 'b1000000-0000-0000-0000-000000000008', gender: 'boys' },
-    { id: 't-26sw-vb', name: '26SW Challengers', batch_id: 'b1000000-0000-0000-0000-000000000005', gender: 'boys' },
-    { id: 't-23ai-tow', name: '23AI Powerhouse', batch_id: 'b1000000-0000-0000-0000-000000000006', gender: 'boys' },
-    { id: 't-22sw-tow', name: '22SW Titans', batch_id: 'b1000000-0000-0000-0000-000000000001', gender: 'boys' },
-    { id: 't-25sw-ludo', name: '25SW Rollers', batch_id: 'b1000000-0000-0000-0000-000000000004', gender: 'boys' },
-    { id: 't-23sw-ludo', name: '23SW Masters', batch_id: 'b1000000-0000-0000-0000-000000000002', gender: 'boys' },
-  ];
-
-  return initialSquads;
+  return [];
 }
 
 export async function getPlayers(): Promise<any[]> {
@@ -206,7 +189,7 @@ export async function getPlayers(): Promise<any[]> {
       .from('players')
       .select('*, batch:batches(*)')
       .order('name');
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       return data;
     }
   } catch {

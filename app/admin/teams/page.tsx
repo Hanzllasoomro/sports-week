@@ -5,14 +5,7 @@ import { createTeam, updateTeam, deleteTeam } from '@/app/actions/roster';
 import { MOCK_BATCHES, MOCK_GAMES } from '@/lib/mock-data';
 
 export default function AdminTeamsPage() {
-  const [teams, setTeams] = useState<any[]>([
-    { id: 't-1', name: '24SW Strikers', game_id: MOCK_GAMES[0].id, game: 'Cricket', batch_id: MOCK_BATCHES[2].id, batch: '24SW', gender: 'boys' },
-    { id: 't-2', name: '23AI Titans', game_id: MOCK_GAMES[0].id, game: 'Cricket', batch_id: MOCK_BATCHES[5].id, batch: '23AI', gender: 'boys' },
-    { id: 't-3', name: '23SW United', game_id: MOCK_GAMES[1].id, game: 'Futsal', batch_id: MOCK_BATCHES[1].id, batch: '23SW', gender: 'boys' },
-    { id: 't-4', name: '24AI FC', game_id: MOCK_GAMES[1].id, game: 'Futsal', batch_id: MOCK_BATCHES[6].id, batch: '24AI', gender: 'boys' },
-    { id: 't-5', name: '24SW Phoenix', game_id: MOCK_GAMES[4].id, game: 'Throwball', batch_id: MOCK_BATCHES[2].id, batch: '24SW', gender: 'girls' },
-    { id: 't-6', name: '22SW Legends', game_id: MOCK_GAMES[4].id, game: 'Throwball', batch_id: MOCK_BATCHES[0].id, batch: '22SW', gender: 'girls' },
-  ]);
+  const [teams, setTeams] = useState<any[]>([]);
 
   const [isAdding, setIsAdding] = useState(false);
   const [editingTeam, setEditingTeam] = useState<any | null>(null);
@@ -34,7 +27,7 @@ export default function AdminTeamsPage() {
         const res = await fetch('/api/teams');
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
+          if (Array.isArray(data)) {
             setTeams(
               data.map((t: any) => ({
                 id: t.id,

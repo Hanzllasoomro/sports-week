@@ -184,28 +184,49 @@ export default function AdminResultsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Match selector & Big +/- scoreboard (Spans 8 cols) */}
           <div className="lg:col-span-8 bg-surface-container border border-outline-variant/30 rounded p-6 shadow-xl">
-            {/* Fixture Selector Dropdown */}
-            <div className="mb-6">
-              <label className="block text-xs font-caps-label text-fog-text uppercase mb-2">
-                Select Active Match
-              </label>
-              <select
-                value={selectedFixtureId}
-                onChange={(e) => setSelectedFixtureId(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-sm focus:border-gold-accent focus:outline-none"
-              >
-                {fixtures.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    [{f.status.toUpperCase()}] {f.game?.name} —{' '}
-                    {f.team_a?.name || f.player_a?.name || 'TBD'} vs{' '}
-                    {f.team_b?.name || f.player_b?.name || 'TBD'} ({f.round || f.stage})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {fixtures.length === 0 ? (
+              <div className="text-center py-12">
+                <span className="material-symbols-outlined text-5xl text-fog-text/50 mb-3">
+                  event_busy
+                </span>
+                <h3 className="font-display text-white text-lg uppercase mb-2">
+                  NO MATCHES CURRENTLY SCHEDULED
+                </h3>
+                <p className="text-xs text-fog-text mb-6 max-w-md mx-auto font-body">
+                  All match results have been cleared or not yet registered. Use the Fixture &amp; Schedule Manager to schedule tournament games.
+                </p>
+                <a
+                  href="/admin/fixtures"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors"
+                >
+                  <span className="material-symbols-outlined text-base">add</span>
+                  <span>Schedule Matches Now</span>
+                </a>
+              </div>
+            ) : (
+              <>
+                {/* Fixture Selector Dropdown */}
+                <div className="mb-6">
+                  <label className="block text-xs font-caps-label text-fog-text uppercase mb-2">
+                    Select Active Match
+                  </label>
+                  <select
+                    value={selectedFixtureId}
+                    onChange={(e) => setSelectedFixtureId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-sm focus:border-gold-accent focus:outline-none"
+                  >
+                    {fixtures.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        [{f.status.toUpperCase()}] {f.game?.name} —{' '}
+                        {f.team_a?.name || f.player_a?.name || 'TBD'} vs{' '}
+                        {f.team_b?.name || f.player_b?.name || 'TBD'} ({f.round || f.stage})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-            {selectedFixture && (
-              <form onSubmit={handleSaveTeamScore}>
+                {selectedFixture && (
+                  <form onSubmit={handleSaveTeamScore}>
                 {/* Match Banner Header */}
                 <div className="p-4 bg-navy-mid rounded border border-outline-variant/20 mb-6 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -367,7 +388,9 @@ export default function AdminResultsPage() {
                 </div>
               </form>
             )}
-          </div>
+          </>
+        )}
+      </div>
 
           {/* Quick Rules & Guidelines Panel (Spans 4 cols) */}
           <div className="lg:col-span-4 flex flex-col gap-6">
