@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { verifyAdminSession } from '@/lib/security/auth';
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -33,8 +34,9 @@ export async function proxy(request: NextRequest) {
   // Guard all /admin/* routes — redirect to login if not authenticated
   const isAdminRoute = request.nextUrl.pathname.startsWith('/admin');
   const isLoginRoute = request.nextUrl.pathname === '/admin/login';
-  const isDemoSession = request.cookies.get('admin_demo_session')?.value === 'true';
-  const isAuthenticated = !!user || isDemoSession;
+  const adminSessionToken = request.cookies.get('admin_session')?.value;
+  const isCryptographicSessionValid = await verifyAdminSession(adminSessionToken);
+  const isAuthenticated = !!user || isCryptographicSessionValid;
 
   if (isAdminRoute && !isLoginRoute && !isAuthenticated) {
     const loginUrl = request.nextUrl.clone();

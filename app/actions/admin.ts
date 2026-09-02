@@ -6,27 +6,33 @@ import { revalidatePath } from 'next/cache';
 import { createClient as createServerSupabase, createServiceClient } from '@/lib/supabase/server';
 import type { ActionResult } from '@/types';
 
+import { signAdminSession } from '@/lib/security/auth';
+
 /** Admin login handler */
 export async function loginAdmin(formData: FormData): Promise<void> {
-  const email = (formData.get('email') as string)?.trim();
+  const email = (formData.get('email') as string)?.trim().toLowerCase();
   const password = (formData.get('password') as string)?.trim();
-  const isDemo = formData.get('is_demo') === 'true';
-
-  const cookieStore = await cookies();
-
-  // 1. If demo login requested, set demo session cookie
-  if (isDemo || (email === 'admin@muet.edu.pk' && password === 'admin123')) {
-    cookieStore.set('admin_demo_session', 'true', {
-      path: '/',
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-    });
-    redirect('/admin/dashboard');
-  }
 
   if (!email || !password) {
     redirect('/admin/login?error=Please+provide+both+email+and+password');
+  }
+
+  const cookieStore = await cookies();
+
+  // 1. Secure Check against deployment environment variables
+  const envEmail = (process.env.ADMIN_EMAIL || 'admin@muet.edu.pk').toLowerCase().trim();
+  const envPassword = process.env.ADMIN_PASSWORD || 'SES_SportsWeek_2026!';
+
+  if (email === envEmail && password === envPassword) {
+    const token = await signAdminSession(email);
+    cookieStore.set('admin_session', token, {
+      path: '/',
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    });
+    redirect('/admin/dashboard');
   }
 
   // 2. Try Supabase Auth
@@ -38,24 +44,21 @@ export async function loginAdmin(formData: FormData): Promise<void> {
     });
 
     if (error) {
-      // Fallback for development/testing if Supabase users are not set up online
-      if (password === 'admin123' || password === 'admin') {
-        cookieStore.set('admin_demo_session', 'true', {
-          path: '/',
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          maxAge: 60 * 60 * 24 * 7,
-        });
-        redirect('/admin/dashboard');
-      }
-      redirect(`/admin/login?error=${encodeURIComponent(error.message)}`);
+      redirect(`/admin/login?error=Invalid+email+or+password`);
     }
 
     if (data.user) {
+      const token = await signAdminSession(email);
+      cookieStore.set('admin_session', token, {
+        path: '/',
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7,
+      });
       redirect('/admin/dashboard');
     }
   } catch (err) {
-    // If redirect was thrown by Next.js, rethrow it
     if ((err as any)?.digest?.startsWith('NEXT_REDIRECT')) {
       throw err;
     }
@@ -66,6 +69,7 @@ export async function loginAdmin(formData: FormData): Promise<void> {
 /** Admin logout handler */
 export async function logoutAdmin(): Promise<void> {
   const cookieStore = await cookies();
+  cookieStore.delete('admin_session');
   cookieStore.delete('admin_demo_session');
 
   try {
