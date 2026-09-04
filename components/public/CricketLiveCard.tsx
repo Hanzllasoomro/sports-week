@@ -347,6 +347,40 @@ export function CricketLiveCard({ fixture }: CricketLiveCardProps) {
           </div>
         </div>
       </div>
+
+      {/* ── Fall of Wickets / Dismissed Batters Scorecard (if any) ── */}
+      {details.batsmen_card && details.batsmen_card.length > 0 && (
+        <div className="border-t border-outline-variant/30 bg-surface-container-low p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-caps-label text-[11px] uppercase text-fog-text font-bold flex items-center gap-1">
+              <span className="material-symbols-outlined text-xs text-live-red">cancel</span>
+              FALL OF WICKETS &bull; DISMISSED BATTERS
+            </span>
+            <span className="text-[10px] font-caps-label text-fog-text uppercase">
+              R (B) &bull; 4s/6s &bull; SR
+            </span>
+          </div>
+
+          <div className="divide-y divide-outline-variant/15 text-xs font-body">
+            {details.batsmen_card.map((b, idx) => {
+              const sr = b.balls > 0 ? ((b.runs / b.balls) * 100).toFixed(1) : '0.0';
+              return (
+                <div key={idx} className="py-1.5 flex items-center justify-between gap-2">
+                  <div className="truncate">
+                    <span className="font-bold text-white mr-2">{b.name}</span>
+                    <span className="text-fog-text text-[11px] italic">({b.how_out || 'out'})</span>
+                  </div>
+                  <div className="font-table-numeral text-right shrink-0 flex items-center gap-3">
+                    <span className="text-white font-bold">{b.runs} ({b.balls}b)</span>
+                    <span className="text-fog-text text-[11px] hidden sm:inline">{b.fours}x4 {b.sixes}x6</span>
+                    <span className="text-gold-accent text-xs w-12 text-right">{sr}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

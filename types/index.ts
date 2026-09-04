@@ -98,6 +98,8 @@ export type CricketMatchDetails = {
   team_b_cricket: CricketInningsScore;
   current_batsmen?: CricketBatsman[];
   current_bowler?: CricketBowler;
+  batsmen_card?: CricketBatsman[]; // Full scorecard of all batters in this match
+  bowlers_card?: CricketBowler[];  // Full spell records of all bowlers in this match
   recent_balls?: string[]; // e.g. ["1", "4", "W", "0", "6", "1wd"]
   crr?: number;            // Current Run Rate
   rrr?: number | null;     // Required Run Rate

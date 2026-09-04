@@ -189,11 +189,11 @@ export async function getPlayers(): Promise<any[]> {
       .from('players')
       .select('*, batch:batches(*)')
       .order('name');
-    if (!error && data) {
+    if (!error && data && data.length > 0) {
       return data;
     }
   } catch {
     // ignore
   }
-  return [];
+  return Object.values(MOCK_PLAYERS_SAMPLE).flat();
 }

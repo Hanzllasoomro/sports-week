@@ -23,13 +23,19 @@ export default function AdminResultsPage() {
   const [podiumPosition, setPodiumPosition] = useState<number>(1);
   const [podiumPoints, setPodiumPoints] = useState<number>(10);
 
-  // Load real fixtures from API on mount
+  const [players, setPlayers] = useState<any[]>([]);
+
+  // Load real fixtures and players from API on mount
   useEffect(() => {
-    async function loadFixtures() {
+    async function loadData() {
       try {
-        const res = await fetch('/api/fixtures');
-        if (res.ok) {
-          const data = await res.json();
+        const [fixRes, playRes] = await Promise.all([
+          fetch('/api/fixtures'),
+          fetch('/api/players'),
+        ]);
+
+        if (fixRes.ok) {
+          const data = await fixRes.json();
           if (Array.isArray(data) && data.length > 0) {
             setFixtures(data);
             if (!selectedFixtureId || !data.some((f: any) => f.id === selectedFixtureId)) {
@@ -37,11 +43,18 @@ export default function AdminResultsPage() {
             }
           }
         }
+
+        if (playRes.ok) {
+          const playData = await playRes.json();
+          if (Array.isArray(playData)) {
+            setPlayers(playData);
+          }
+        }
       } catch (err) {
-        console.error('Failed to load fixtures', err);
+        console.error('Failed to load fixtures / players', err);
       }
     }
-    loadFixtures();
+    loadData();
   }, []);
 
   const selectedFixture = fixtures.find((f) => f.id === selectedFixtureId) || fixtures[0];
@@ -273,6 +286,7 @@ export default function AdminResultsPage() {
                   selectedFixture.game?.slug === 'cricket' ? (
                     <CricketScorerRoom
                       fixture={selectedFixture}
+                      players={players}
                       isSubmitting={isSubmitting}
                       onSave={handleSaveCricketScore}
                     />
