@@ -21,6 +21,9 @@ export default function AdminTeamsPage() {
   // Search filter for available player pool in builder
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
 
+  // Format mode for racket sports (singles vs doubles/pair)
+  const [teamFormatMode, setTeamFormatMode] = useState<'doubles' | 'singles'>('doubles');
+
   // Inline Quick Player Add state
   const [showQuickAddPlayer, setShowQuickAddPlayer] = useState(false);
   const [quickPlayerName, setQuickPlayerName] = useState('');
@@ -85,7 +88,7 @@ export default function AdminTeamsPage() {
   // Compute active sport squad rules for active form (Add or Edit)
   const activeGameId = isAdding ? formData.game_id : editingTeam?.game_id;
   const activeGame = MOCK_GAMES.find((g) => g.id === activeGameId) || MOCK_GAMES[0];
-  const squadRules = getSquadRulesForGame(activeGame.slug);
+  const squadRules = getSquadRulesForGame(activeGame.slug, teamFormatMode);
 
   const activeBatchId = isAdding ? formData.batch_id : editingTeam?.batch_id;
   const activeGender = isAdding ? formData.gender : editingTeam?.gender;
@@ -758,9 +761,9 @@ export default function AdminTeamsPage() {
                 }}
                 className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
               >
-                {MOCK_GAMES.filter((g) => g.format === 'team').map((g) => (
+                {MOCK_GAMES.filter((g) => g.format === 'team' || g.slug === 'badminton' || g.slug === 'table-tennis').map((g) => (
                   <option key={g.id} value={g.id}>
-                    {g.name}
+                    {g.name} {g.slug === 'badminton' || g.slug === 'table-tennis' ? '(Pairs / Singles)' : ''}
                   </option>
                 ))}
               </select>
@@ -809,6 +812,48 @@ export default function AdminTeamsPage() {
               </select>
             </div>
           </div>
+
+          {/* Format Mode for Badminton & Table Tennis */}
+          {(activeGame.slug === 'badminton' || activeGame.slug === 'table-tennis') && (
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-surface-container-lowest border border-gold-accent/40 rounded">
+              <span className="text-xs font-caps-label text-white uppercase font-bold flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-sm text-gold-accent">sports_tennis</span>
+                <span>{activeGame.name} Squad Format:</span>
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTeamFormatMode('doubles');
+                    setFormData((prev) => ({ ...prev, playing_player_ids: [], optional_player_ids: [] }));
+                  }}
+                  className={cn(
+                    'px-3 py-1.5 rounded text-xs font-caps-label uppercase font-bold border transition-colors cursor-pointer',
+                    teamFormatMode === 'doubles'
+                      ? 'bg-gold-accent text-navy-deep border-gold-accent'
+                      : 'bg-surface-container border-outline-variant/30 text-fog-text hover:text-white'
+                  )}
+                >
+                  👥 Doubles / Pair (2 Playing + 1 Reserve)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTeamFormatMode('singles');
+                    setFormData((prev) => ({ ...prev, playing_player_ids: [], optional_player_ids: [] }));
+                  }}
+                  className={cn(
+                    'px-3 py-1.5 rounded text-xs font-caps-label uppercase font-bold border transition-colors cursor-pointer',
+                    teamFormatMode === 'singles'
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-surface-container border-outline-variant/30 text-fog-text hover:text-white'
+                  )}
+                >
+                  👤 Singles (1 Playing Athlete)
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Interactive Squad Builder */}
           {renderSquadBuilder()}
@@ -879,9 +924,9 @@ export default function AdminTeamsPage() {
                   }
                   className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
                 >
-                  {MOCK_GAMES.filter((g) => g.format === 'team').map((g) => (
+                  {MOCK_GAMES.filter((g) => g.format === 'team' || g.slug === 'badminton' || g.slug === 'table-tennis').map((g) => (
                     <option key={g.id} value={g.id}>
-                      {g.name}
+                      {g.name} {g.slug === 'badminton' || g.slug === 'table-tennis' ? '(Pairs / Singles)' : ''}
                     </option>
                   ))}
                 </select>
@@ -923,6 +968,48 @@ export default function AdminTeamsPage() {
                 </select>
               </div>
             </div>
+
+            {/* Format Mode for Badminton & Table Tennis (Edit Mode) */}
+            {(activeGame.slug === 'badminton' || activeGame.slug === 'table-tennis') && (
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-surface-container-lowest border border-gold-accent/40 rounded">
+                <span className="text-xs font-caps-label text-white uppercase font-bold flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm text-gold-accent">sports_tennis</span>
+                  <span>{activeGame.name} Squad Format:</span>
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTeamFormatMode('doubles');
+                      setEditingTeam((prev: any) => ({ ...prev, playing_player_ids: [], optional_player_ids: [] }));
+                    }}
+                    className={cn(
+                      'px-3 py-1.5 rounded text-xs font-caps-label uppercase font-bold border transition-colors cursor-pointer',
+                      teamFormatMode === 'doubles'
+                        ? 'bg-gold-accent text-navy-deep border-gold-accent'
+                        : 'bg-surface-container border-outline-variant/30 text-fog-text hover:text-white'
+                    )}
+                  >
+                    👥 Doubles / Pair (2 Playing + 1 Reserve)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTeamFormatMode('singles');
+                      setEditingTeam((prev: any) => ({ ...prev, playing_player_ids: [], optional_player_ids: [] }));
+                    }}
+                    className={cn(
+                      'px-3 py-1.5 rounded text-xs font-caps-label uppercase font-bold border transition-colors cursor-pointer',
+                      teamFormatMode === 'singles'
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-surface-container border-outline-variant/30 text-fog-text hover:text-white'
+                    )}
+                  >
+                    👤 Singles (1 Playing Athlete)
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Interactive Squad Builder for Edit */}
             {renderSquadBuilder()}

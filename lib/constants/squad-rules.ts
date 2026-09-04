@@ -61,6 +61,38 @@ export const SQUAD_RULES_MAP: Record<string, SportSquadRules> = {
     playingLabel: 'Playing Pair',
     optionalLabel: 'Optional Reserve',
   },
+  badminton: {
+    sportSlug: 'badminton',
+    playingCount: 2,
+    optionalCount: 1,
+    totalMax: 3,
+    playingLabel: 'Playing Pair (2 Players)',
+    optionalLabel: 'Optional Reserve (Max 1)',
+  },
+  'badminton-singles': {
+    sportSlug: 'badminton-singles',
+    playingCount: 1,
+    optionalCount: 0,
+    totalMax: 1,
+    playingLabel: 'Singles Competitor (1 Player)',
+    optionalLabel: 'No Reserves (Singles)',
+  },
+  'table-tennis': {
+    sportSlug: 'table-tennis',
+    playingCount: 2,
+    optionalCount: 1,
+    totalMax: 3,
+    playingLabel: 'Playing Pair (2 Players)',
+    optionalLabel: 'Optional Reserve (Max 1)',
+  },
+  'table-tennis-singles': {
+    sportSlug: 'table-tennis-singles',
+    playingCount: 1,
+    optionalCount: 0,
+    totalMax: 1,
+    playingLabel: 'Singles Competitor (1 Player)',
+    optionalLabel: 'No Reserves (Singles)',
+  },
 };
 
 export const DEFAULT_SQUAD_RULES: SportSquadRules = {
@@ -72,8 +104,16 @@ export const DEFAULT_SQUAD_RULES: SportSquadRules = {
   optionalLabel: 'Optional / Substitutes',
 };
 
-export function getSquadRulesForGame(gameSlug?: string): SportSquadRules {
+export function getSquadRulesForGame(
+  gameSlug?: string,
+  formatMode?: 'singles' | 'doubles' | 'individual' | 'team'
+): SportSquadRules {
   if (!gameSlug) return DEFAULT_SQUAD_RULES;
   const key = gameSlug.toLowerCase().trim();
+
+  if ((key === 'badminton' || key === 'table-tennis') && (formatMode === 'singles' || formatMode === 'individual')) {
+    return SQUAD_RULES_MAP[`${key}-singles`] || SQUAD_RULES_MAP[key] || DEFAULT_SQUAD_RULES;
+  }
+
   return SQUAD_RULES_MAP[key] || DEFAULT_SQUAD_RULES;
 }

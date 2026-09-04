@@ -31,22 +31,30 @@ export default function AdminFixturesPage() {
   // ── Auto-Schedule Bracket State ──
   const [isAutoGenerating, setIsAutoGenerating] = useState(false);
   const [autoGameId, setAutoGameId] = useState<string>('all');
-  const [autoTeamCount, setAutoTeamCount] = useState<4 | 8 | 9>(8);
+  const [autoTeamCount, setAutoTeamCount] = useState<number>(24);
   const [autoGender, setAutoGender] = useState<'boys' | 'girls'>('boys');
-  const [autoQuarterDate, setAutoQuarterDate] = useState<string>('2026-09-08');
+  const [autoR32Date, setAutoR32Date] = useState<string>('2026-09-08');
+  const [autoR16Date, setAutoR16Date] = useState<string>('2026-09-08');
+  const [autoQuarterDate, setAutoQuarterDate] = useState<string>('2026-09-09');
   const [autoSemiDate, setAutoSemiDate] = useState<string>('2026-09-09');
-  const [autoVenue, setAutoVenue] = useState<string>('MUET Main Sports Arena');
+  const [autoVenue, setAutoVenue] = useState<string>('MUET Main Sports Complex');
+  const [autoMatchFormat, setAutoMatchFormat] = useState<'team' | 'individual'>('team');
   const [isGeneratingSlots, setIsGeneratingSlots] = useState(false);
 
   // ── Interactive Slot Placement State ──
   const [slotAssignFixture, setSlotAssignFixture] = useState<FixtureWithRelations | null>(null);
+  const [slotMatchFormat, setSlotMatchFormat] = useState<'team' | 'individual'>('team');
   const [slotBatchAId, setSlotBatchAId] = useState<string>(MOCK_BATCHES[2].id);
+  const [slotTeamAId, setSlotTeamAId] = useState<string>('');
   const [slotTeamAName, setSlotTeamAName] = useState<string>('');
+  const [slotPlayerAId, setSlotPlayerAId] = useState<string>('');
   const [slotPlayerAName, setSlotPlayerAName] = useState<string>('');
   const [slotPlayerARollNo, setSlotPlayerARollNo] = useState<string>('');
 
   const [slotBatchBId, setSlotBatchBId] = useState<string>(MOCK_BATCHES[5].id);
+  const [slotTeamBId, setSlotTeamBId] = useState<string>('');
   const [slotTeamBName, setSlotTeamBName] = useState<string>('');
+  const [slotPlayerBId, setSlotPlayerBId] = useState<string>('');
   const [slotPlayerBName, setSlotPlayerBName] = useState<string>('');
   const [slotPlayerBRollNo, setSlotPlayerBRollNo] = useState<string>('');
   const [isPlacingSlot, setIsPlacingSlot] = useState(false);
@@ -151,16 +159,20 @@ export default function AdminFixturesPage() {
       game_id: autoGameId,
       team_count: autoTeamCount,
       gender: autoGender,
+      round32_date: autoR32Date,
+      round16_date: autoR16Date,
       quarter_date: autoQuarterDate,
       semi_date: autoSemiDate,
       venue: autoVenue,
+      match_format: autoMatchFormat,
     });
 
     if (res.error) {
       setFeedbackMessage(`Error: ${res.error.message}`);
     } else {
+      const byeInfo = res.data?.byes ? ` (${res.data.byes} byes into Round of 16)` : '';
       setFeedbackMessage(
-        `Successfully generated ${res.data?.count || ''} tournament bracket slots! All finals scheduled on Sep 10, 2026.`
+        `Successfully generated ${res.data?.count || ''} tournament bracket slots${byeInfo}! All finals locked to Sep 10, 2026.`
       );
       setIsAutoGenerating(false);
 
@@ -172,7 +184,7 @@ export default function AdminFixturesPage() {
       }
     }
     setIsGeneratingSlots(false);
-    setTimeout(() => setFeedbackMessage(null), 4500);
+    setTimeout(() => setFeedbackMessage(null), 5000);
   }
 
   // ── Assign Competitors to a Slot ──
@@ -183,7 +195,7 @@ export default function AdminFixturesPage() {
     setIsPlacingSlot(true);
     setFeedbackMessage('Placing competitors into fixture slot...');
 
-    const isTeam = slotAssignFixture.game?.format === 'team';
+    const isTeam = slotMatchFormat === 'team';
     const payload: any = {
       fixture_id: slotAssignFixture.id,
       is_team: isTeam,
@@ -192,14 +204,18 @@ export default function AdminFixturesPage() {
     };
 
     if (isTeam) {
+      payload.team_a_id = slotTeamAId || undefined;
       payload.team_a_name = slotTeamAName;
       payload.team_a_batch_id = slotBatchAId;
+      payload.team_b_id = slotTeamBId || undefined;
       payload.team_b_name = slotTeamBName;
       payload.team_b_batch_id = slotBatchBId;
     } else {
+      payload.player_a_id = slotPlayerAId || undefined;
       payload.player_a_name = slotPlayerAName || 'Athlete A';
       payload.player_a_roll_no = slotPlayerARollNo;
       payload.player_a_batch_id = slotBatchAId;
+      payload.player_b_id = slotPlayerBId || undefined;
       payload.player_b_name = slotPlayerBName || 'Athlete B';
       payload.player_b_roll_no = slotPlayerBRollNo;
       payload.player_b_batch_id = slotBatchBId;
@@ -414,7 +430,7 @@ export default function AdminFixturesPage() {
             </div>
 
             <p className="text-xs text-fog-text mb-5 font-body leading-relaxed">
-              Generate tournament fixture slot placeholders automatically based on your desired bracket size. You decide the dates for Quarter-Finals and Semi-Finals below, while <strong>all Championship Finals are locked to September 10, 2026</strong>.
+              Generate tournament fixture slot placeholders automatically based on your desired bracket size. Supports standard knockout elimination with <strong>automatic Byes</strong> for <strong>20 to 25 teams</strong> (Badminton, Table Tennis, and all championship sports). All Championship Finals are strictly locked to September 10, 2026.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
@@ -425,7 +441,13 @@ export default function AdminFixturesPage() {
                 </label>
                 <select
                   value={autoGameId}
-                  onChange={(e) => setAutoGameId(e.target.value)}
+                  onChange={(e) => {
+                    setAutoGameId(e.target.value);
+                    const sel = games.find((g) => g.id === e.target.value);
+                    if (sel) {
+                      setAutoMatchFormat(sel.format === 'team' ? 'team' : 'individual');
+                    }
+                  }}
                   className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-bold text-gold-accent"
                 >
                   <option value="all">🌟 All 10 Championship Sports</option>
@@ -437,34 +459,108 @@ export default function AdminFixturesPage() {
                 </select>
               </div>
 
-              {/* Bracket Size */}
+              {/* Match Format (Singles vs Pair-Up) */}
               <div>
                 <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
-                  Number of Teams / Participants
+                  Match Format Mode
                 </label>
-                <select
-                  value={autoTeamCount}
-                  onChange={(e) => setAutoTeamCount(Number(e.target.value) as any)}
-                  className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-bold"
-                >
-                  <option value={4}>4 Teams (2 Semi-Finals + 1 Final)</option>
-                  <option value={8}>8 Teams (4 Quarter-Finals + 2 Semi-Finals + 1 Final)</option>
-                  <option value={9}>9 Academic Batches (Playoff + 4 Quarters + 2 Semis + 1 Final)</option>
-                </select>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAutoMatchFormat('individual')}
+                    className={`px-3 py-2 rounded text-xs font-caps-label uppercase font-bold border transition-colors ${
+                      autoMatchFormat === 'individual'
+                        ? 'bg-primary/30 border-primary text-white'
+                        : 'bg-surface-container-lowest border-outline-variant/30 text-fog-text hover:text-white'
+                    }`}
+                  >
+                    👤 Singles (1v1)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAutoMatchFormat('team')}
+                    className={`px-3 py-2 rounded text-xs font-caps-label uppercase font-bold border transition-colors ${
+                      autoMatchFormat === 'team'
+                        ? 'bg-gold-accent/30 border-gold-accent text-gold-accent'
+                        : 'bg-surface-container-lowest border-outline-variant/30 text-fog-text hover:text-white'
+                    }`}
+                  >
+                    👥 Doubles / Pairs (2v2)
+                  </button>
+                </div>
+              </div>
+
+              {/* Bracket Size with Presets */}
+              <div className="sm:col-span-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-caps-label text-fog-text uppercase font-bold">
+                    Number of Competitors / Teams (4 to 32)
+                  </label>
+                  <span className="text-xs font-table-numeral text-gold-accent font-bold">
+                    {autoTeamCount} Competitors Selected
+                  </span>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {[
+                    { label: '4 Teams', count: 4 },
+                    { label: '8 Teams', count: 8 },
+                    { label: '9 Batches', count: 9 },
+                    { label: '16 Teams', count: 16 },
+                    { label: '20 Teams (12 Byes)', count: 20 },
+                    { label: '22 Teams (10 Byes)', count: 22 },
+                    { label: '24 Teams (8 Byes)', count: 24 },
+                    { label: '25 Teams (7 Byes)', count: 25 },
+                    { label: '32 Teams', count: 32 },
+                  ].map((p) => (
+                    <button
+                      key={p.count}
+                      type="button"
+                      onClick={() => setAutoTeamCount(p.count)}
+                      className={`px-2.5 py-1 rounded text-[11px] font-caps-label uppercase transition-all ${
+                        autoTeamCount === p.count
+                          ? 'bg-gold-accent text-navy-deep font-bold shadow'
+                          : 'bg-surface-container-lowest border border-outline-variant/30 text-fog-text hover:text-white hover:border-gold-accent/40'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={4}
+                    max={32}
+                    value={autoTeamCount}
+                    onChange={(e) => setAutoTeamCount(Number(e.target.value))}
+                    className="flex-1 accent-gold-accent cursor-pointer"
+                  />
+                  <input
+                    type="number"
+                    min={4}
+                    max={32}
+                    value={autoTeamCount}
+                    onChange={(e) => setAutoTeamCount(Math.max(4, Math.min(32, Number(e.target.value) || 4)))}
+                    className="w-16 px-2 py-1 bg-surface-container-lowest border border-outline-variant/40 rounded text-center text-white text-xs font-bold font-table-numeral"
+                  />
+                </div>
               </div>
 
               {/* Category */}
               <div>
                 <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
-                  Category
+                  Gender Category
                 </label>
                 <select
                   value={autoGender}
                   onChange={(e) => setAutoGender(e.target.value as any)}
                   className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
                 >
-                  <option value="boys">Boys</option>
-                  <option value="girls">Girls</option>
+                  <option value="boys">Boys Division</option>
+                  <option value="girls">Girls Division</option>
                 </select>
               </div>
 
@@ -483,55 +579,154 @@ export default function AdminFixturesPage() {
               </div>
             </div>
 
+            {/* ── Interactive Bracket Structure Summary Card ── */}
+            {(() => {
+              const N = autoTeamCount;
+              const byes = N > 16 ? 32 - N : N > 8 ? 16 - N : 0;
+              const r32Matches = N > 16 ? N - 16 : 0;
+              const r16Matches = N > 16 ? 8 : N > 8 ? N - 8 : 0;
+              const totalMatches = N - 1;
+
+              return (
+                <div className="p-4 bg-surface-container-lowest border border-gold-accent/30 rounded mb-5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-caps-label text-xs uppercase text-gold-accent font-bold flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-sm">account_tree</span>
+                      <span>Tournament Bracket Breakdown ({N} Teams)</span>
+                    </span>
+                    <span className="px-2 py-0.5 bg-gold-accent/20 border border-gold-accent/40 rounded text-[10px] font-caps-label text-gold-accent font-bold uppercase">
+                      {totalMatches} Total Matches
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs pt-1">
+                    {N > 16 ? (
+                      <>
+                        <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
+                          <div className="text-[10px] text-fog-text uppercase font-caps-label">Direct Byes to R16</div>
+                          <div className="font-display text-win-green text-sm font-bold">{byes} Teams</div>
+                        </div>
+                        <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
+                          <div className="text-[10px] text-fog-text uppercase font-caps-label">Round of 32</div>
+                          <div className="font-display text-white text-sm font-bold">{r32Matches} Matches</div>
+                        </div>
+                        <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
+                          <div className="text-[10px] text-fog-text uppercase font-caps-label">Round of 16</div>
+                          <div className="font-display text-white text-sm font-bold">8 Matches</div>
+                        </div>
+                        <div className="p-2 bg-surface-container rounded border border-gold-accent/30">
+                          <div className="text-[10px] text-gold-accent uppercase font-caps-label">Quarters &rarr; Final</div>
+                          <div className="font-display text-gold-accent text-sm font-bold">7 Matches (4+2+1)</div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
+                          <div className="text-[10px] text-fog-text uppercase font-caps-label">Bracket Size</div>
+                          <div className="font-display text-white text-sm font-bold">{N <= 4 ? 4 : N <= 8 ? 8 : 16}</div>
+                        </div>
+                        <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
+                          <div className="text-[10px] text-fog-text uppercase font-caps-label">Byes</div>
+                          <div className="font-display text-win-green text-sm font-bold">{byes} Teams</div>
+                        </div>
+                        <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
+                          <div className="text-[10px] text-fog-text uppercase font-caps-label">Early Rounds</div>
+                          <div className="font-display text-white text-sm font-bold">{totalMatches - 3} Matches</div>
+                        </div>
+                        <div className="p-2 bg-surface-container rounded border border-gold-accent/30">
+                          <div className="text-[10px] text-gold-accent uppercase font-caps-label">Semis &amp; Final</div>
+                          <div className="font-display text-gold-accent text-sm font-bold">3 Matches (2+1)</div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* ── Date Configuration (Admin decides non-finals, Finals locked on Sep 10) ── */}
             <div className="p-4 bg-navy-mid/60 border border-outline-variant/30 rounded mb-6">
               <label className="block text-xs font-caps-label text-white uppercase mb-3 font-bold flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-sm text-gold-accent">event</span>
-                <span>Stage Dates Schedule</span>
+                <span>Tournament Round Schedule Dates</span>
               </label>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* Quarter / Group Date (Admin Decides) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                {/* Round of 32 Date */}
+                {autoTeamCount > 16 && (
+                  <div>
+                    <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
+                      Round of 32:
+                    </label>
+                    <input
+                      type="date"
+                      value={autoR32Date}
+                      onChange={(e) => setAutoR32Date(e.target.value)}
+                      required
+                      className="w-full px-2.5 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                    />
+                    <span className="text-[10px] text-win-green mt-1 block">Day 1 Morning</span>
+                  </div>
+                )}
+
+                {/* Round of 16 Date */}
+                {autoTeamCount > 8 && (
+                  <div>
+                    <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
+                      Round of 16:
+                    </label>
+                    <input
+                      type="date"
+                      value={autoR16Date}
+                      onChange={(e) => setAutoR16Date(e.target.value)}
+                      required
+                      className="w-full px-2.5 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                    />
+                    <span className="text-[10px] text-win-green mt-1 block">Day 1 / Day 2</span>
+                  </div>
+                )}
+
+                {/* Quarter Date */}
                 <div>
                   <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
-                    Quarter-Finals Date:
+                    Quarter-Finals:
                   </label>
                   <input
                     type="date"
                     value={autoQuarterDate}
                     onChange={(e) => setAutoQuarterDate(e.target.value)}
                     required
-                    className="w-full px-3 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                    className="w-full px-2.5 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
                   />
-                  <span className="text-[10px] text-win-green mt-1 block">Admin Configurable</span>
+                  <span className="text-[10px] text-win-green mt-1 block">Day 2</span>
                 </div>
 
-                {/* Semi Date (Admin Decides) */}
+                {/* Semi Date */}
                 <div>
                   <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
-                    Semi-Finals Date:
+                    Semi-Finals:
                   </label>
                   <input
                     type="date"
                     value={autoSemiDate}
                     onChange={(e) => setAutoSemiDate(e.target.value)}
                     required
-                    className="w-full px-3 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                    className="w-full px-2.5 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
                   />
-                  <span className="text-[10px] text-win-green mt-1 block">Admin Configurable</span>
+                  <span className="text-[10px] text-win-green mt-1 block">Day 2 Evening</span>
                 </div>
 
                 {/* Finals Date (STRICTLY LOCKED TO SEP 10) */}
                 <div>
                   <label className="block text-[11px] font-caps-label text-gold-accent uppercase mb-1 font-bold flex items-center gap-1">
                     <span className="material-symbols-outlined text-xs">lock</span>
-                    <span>Championship Finals:</span>
+                    <span>Grand Finals:</span>
                   </label>
-                  <div className="px-3 py-2 bg-navy-mid rounded border border-gold-accent/50 text-gold-accent font-caps-label text-xs font-bold text-center">
-                    September 10, 2026
+                  <div className="px-2.5 py-1.5 bg-navy-mid rounded border border-gold-accent/50 text-gold-accent font-caps-label text-xs font-bold text-center">
+                    Sep 10, 2026
                   </div>
-                  <span className="text-[10px] text-gold-accent mt-1 block text-center">
-                    Locked to Grand Finale
+                  <span className="text-[10px] text-gold-accent mt-1 block text-center font-caps-label">
+                    Grand Finale
                   </span>
                 </div>
               </div>
@@ -551,7 +746,7 @@ export default function AdminFixturesPage() {
                 className="px-6 py-2 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-sm">flash_on</span>
-                <span>{isGeneratingSlots ? 'Generating...' : 'Generate Bracket Slots'}</span>
+                <span>{isGeneratingSlots ? 'Generating...' : `Generate ${autoTeamCount}-Team Bracket`}</span>
               </button>
             </div>
           </form>
@@ -584,13 +779,46 @@ export default function AdminFixturesPage() {
               </button>
             </div>
 
-            {slotAssignFixture.game?.format === 'team' ? (
-              /* ── TEAM PLACEMENT ── */
+            {/* Format Toggle: Singles vs Doubles / Pairs */}
+            <div className="flex items-center justify-between p-2.5 bg-surface-container-lowest rounded border border-outline-variant/30 mb-4">
+              <span className="text-xs font-caps-label text-fog-text uppercase font-bold flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-sm text-gold-accent">tune</span>
+                <span>Match Format:</span>
+              </span>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setSlotMatchFormat('individual')}
+                  className={`px-3 py-1.5 rounded text-xs font-caps-label uppercase font-bold border transition-colors ${
+                    slotMatchFormat === 'individual'
+                      ? 'bg-primary/30 border-primary text-white shadow-sm'
+                      : 'bg-surface-container border-transparent text-fog-text hover:text-white'
+                  }`}
+                >
+                  👤 Singles (1v1 Athlete)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSlotMatchFormat('team')}
+                  className={`px-3 py-1.5 rounded text-xs font-caps-label uppercase font-bold border transition-colors ${
+                    slotMatchFormat === 'team'
+                      ? 'bg-gold-accent/30 border-gold-accent text-gold-accent shadow-sm'
+                      : 'bg-surface-container border-transparent text-fog-text hover:text-white'
+                  }`}
+                >
+                  👥 Doubles / Pairs (2v2 Team)
+                </button>
+              </div>
+            </div>
+
+            {slotMatchFormat === 'team' ? (
+              /* ── TEAM / PAIR PLACEMENT ── */
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                {/* Team A */}
+                {/* Team / Pair A */}
                 <div className="p-4 bg-surface-container-lowest rounded border border-gold-accent/30">
-                  <div className="font-caps-label text-xs uppercase text-gold-accent font-bold mb-2">
-                    TEAM / SQUAD A
+                  <div className="font-caps-label text-xs uppercase text-gold-accent font-bold mb-2 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs">group</span>
+                    <span>PAIR / SQUAD A</span>
                   </div>
                   <div className="space-y-2.5">
                     <div>
@@ -599,7 +827,10 @@ export default function AdminFixturesPage() {
                       </label>
                       <select
                         value={slotBatchAId}
-                        onChange={(e) => setSlotBatchAId(e.target.value)}
+                        onChange={(e) => {
+                          setSlotBatchAId(e.target.value);
+                          setSlotTeamAId('');
+                        }}
                         className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
                       >
                         {batches.map((b) => (
@@ -612,11 +843,14 @@ export default function AdminFixturesPage() {
 
                     <div>
                       <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
-                        Registered Squad
+                        Select Registered Squad / Pair
                       </label>
                       <select
+                        value={slotTeamAId}
                         onChange={(e) => {
-                          if (e.target.value) setSlotTeamAName(e.target.value);
+                          setSlotTeamAId(e.target.value);
+                          const t = registeredTeams.find((x) => x.id === e.target.value);
+                          if (t) setSlotTeamAName(t.name);
                         }}
                         className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
                       >
@@ -624,7 +858,7 @@ export default function AdminFixturesPage() {
                         {registeredTeams
                           .filter((t) => t.batch_id === slotBatchAId)
                           .map((t) => (
-                            <option key={t.id} value={t.name}>
+                            <option key={t.id} value={t.id}>
                               {t.name}
                             </option>
                           ))}
@@ -633,12 +867,13 @@ export default function AdminFixturesPage() {
 
                     <div>
                       <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
-                        Squad Name
+                        Pair / Squad Name
                       </label>
                       <input
                         type="text"
                         value={slotTeamAName}
                         onChange={(e) => setSlotTeamAName(e.target.value)}
+                        placeholder="e.g. 24SW Pair A or Hamza & Ali"
                         required
                         className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs font-bold text-gold-accent"
                       />
@@ -646,10 +881,11 @@ export default function AdminFixturesPage() {
                   </div>
                 </div>
 
-                {/* Team B */}
+                {/* Team / Pair B */}
                 <div className="p-4 bg-surface-container-lowest rounded border border-outline-variant/30">
-                  <div className="font-caps-label text-xs uppercase text-fog-text font-bold mb-2">
-                    TEAM / SQUAD B
+                  <div className="font-caps-label text-xs uppercase text-fog-text font-bold mb-2 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs">group</span>
+                    <span>PAIR / SQUAD B</span>
                   </div>
                   <div className="space-y-2.5">
                     <div>
@@ -658,7 +894,10 @@ export default function AdminFixturesPage() {
                       </label>
                       <select
                         value={slotBatchBId}
-                        onChange={(e) => setSlotBatchBId(e.target.value)}
+                        onChange={(e) => {
+                          setSlotBatchBId(e.target.value);
+                          setSlotTeamBId('');
+                        }}
                         className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
                       >
                         {batches.map((b) => (
@@ -671,11 +910,14 @@ export default function AdminFixturesPage() {
 
                     <div>
                       <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
-                        Registered Squad
+                        Select Registered Squad / Pair
                       </label>
                       <select
+                        value={slotTeamBId}
                         onChange={(e) => {
-                          if (e.target.value) setSlotTeamBName(e.target.value);
+                          setSlotTeamBId(e.target.value);
+                          const t = registeredTeams.find((x) => x.id === e.target.value);
+                          if (t) setSlotTeamBName(t.name);
                         }}
                         className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
                       >
@@ -683,7 +925,7 @@ export default function AdminFixturesPage() {
                         {registeredTeams
                           .filter((t) => t.batch_id === slotBatchBId)
                           .map((t) => (
-                            <option key={t.id} value={t.name}>
+                            <option key={t.id} value={t.id}>
                               {t.name}
                             </option>
                           ))}
@@ -692,12 +934,13 @@ export default function AdminFixturesPage() {
 
                     <div>
                       <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
-                        Squad Name
+                        Pair / Squad Name
                       </label>
                       <input
                         type="text"
                         value={slotTeamBName}
                         onChange={(e) => setSlotTeamBName(e.target.value)}
+                        placeholder="e.g. 23AI Pair A or Usman & Bilal"
                         required
                         className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs font-bold text-white"
                       />
@@ -710,8 +953,9 @@ export default function AdminFixturesPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 {/* Athlete A */}
                 <div className="p-4 bg-surface-container-lowest rounded border border-primary/40">
-                  <div className="font-caps-label text-xs uppercase text-primary font-bold mb-2">
-                    ATHLETE A
+                  <div className="font-caps-label text-xs uppercase text-primary font-bold mb-2 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs">person</span>
+                    <span>ATHLETE A (SINGLES)</span>
                   </div>
                   <div className="space-y-2.5">
                     <div>
@@ -720,7 +964,10 @@ export default function AdminFixturesPage() {
                       </label>
                       <select
                         value={slotBatchAId}
-                        onChange={(e) => setSlotBatchAId(e.target.value)}
+                        onChange={(e) => {
+                          setSlotBatchAId(e.target.value);
+                          setSlotPlayerAId('');
+                        }}
                         className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
                       >
                         {batches.map((b) => (
@@ -733,10 +980,12 @@ export default function AdminFixturesPage() {
 
                     <div>
                       <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
-                        Select Athlete
+                        Select Registered Athlete
                       </label>
                       <select
+                        value={slotPlayerAId}
                         onChange={(e) => {
+                          setSlotPlayerAId(e.target.value);
                           const p = registeredPlayers.find((x) => x.id === e.target.value);
                           if (p) {
                             setSlotPlayerAName(p.name);
@@ -778,8 +1027,9 @@ export default function AdminFixturesPage() {
 
                 {/* Athlete B */}
                 <div className="p-4 bg-surface-container-lowest rounded border border-outline-variant/30">
-                  <div className="font-caps-label text-xs uppercase text-fog-text font-bold mb-2">
-                    ATHLETE B
+                  <div className="font-caps-label text-xs uppercase text-fog-text font-bold mb-2 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs">person</span>
+                    <span>ATHLETE B (SINGLES)</span>
                   </div>
                   <div className="space-y-2.5">
                     <div>
@@ -788,7 +1038,10 @@ export default function AdminFixturesPage() {
                       </label>
                       <select
                         value={slotBatchBId}
-                        onChange={(e) => setSlotBatchBId(e.target.value)}
+                        onChange={(e) => {
+                          setSlotBatchBId(e.target.value);
+                          setSlotPlayerBId('');
+                        }}
                         className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
                       >
                         {batches.map((b) => (
@@ -801,10 +1054,12 @@ export default function AdminFixturesPage() {
 
                     <div>
                       <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
-                        Select Athlete
+                        Select Registered Athlete
                       </label>
                       <select
+                        value={slotPlayerBId}
                         onChange={(e) => {
+                          setSlotPlayerBId(e.target.value);
                           const p = registeredPlayers.find((x) => x.id === e.target.value);
                           if (p) {
                             setSlotPlayerBName(p.name);
@@ -1279,16 +1534,28 @@ export default function AdminFixturesPage() {
                           <button
                             type="button"
                             onClick={() => {
+                              const isTeam = !!f.team_a_id || f.game?.format === 'team' || (!f.player_a_id && (f.game?.slug === 'badminton' || f.game?.slug === 'table-tennis'));
                               setSlotAssignFixture(f);
-                              setSlotTeamAName('');
-                              setSlotTeamBName('');
-                              setSlotPlayerAName('');
-                              setSlotPlayerBName('');
+                              setSlotMatchFormat(isTeam ? 'team' : 'individual');
+                              setSlotTeamAId(f.team_a_id || '');
+                              setSlotTeamAName(f.team_a?.name || '');
+                              setSlotTeamBId(f.team_b_id || '');
+                              setSlotTeamBName(f.team_b?.name || '');
+                              setSlotPlayerAId(f.player_a_id || '');
+                              setSlotPlayerAName(f.player_a?.name || '');
+                              setSlotPlayerARollNo(f.player_a?.roll_no || '');
+                              setSlotPlayerBId(f.player_b_id || '');
+                              setSlotPlayerBName(f.player_b?.name || '');
+                              setSlotPlayerBRollNo(f.player_b?.roll_no || '');
+                              if (f.team_a?.batch_id) setSlotBatchAId(f.team_a.batch_id);
+                              else if (f.player_a?.batch_id) setSlotBatchAId(f.player_a.batch_id);
+                              if (f.team_b?.batch_id) setSlotBatchBId(f.team_b.batch_id);
+                              else if (f.player_b?.batch_id) setSlotBatchBId(f.player_b.batch_id);
                             }}
                             className="px-2.5 py-1 text-[11px] font-caps-label uppercase bg-gold-accent/20 text-gold-accent border border-gold-accent/50 hover:bg-gold-accent hover:text-navy-deep rounded font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
                           >
-                            <span className="material-symbols-outlined text-xs">add</span>
-                            <span>Place Teams</span>
+                            <span className="material-symbols-outlined text-xs">how_to_reg</span>
+                            <span>Place Competitors</span>
                           </button>
                         </div>
                       ) : (
@@ -1300,11 +1567,23 @@ export default function AdminFixturesPage() {
                           <button
                             type="button"
                             onClick={() => {
+                              const isTeam = !!f.team_a_id || f.game?.format === 'team' || (!f.player_a_id && (f.game?.slug === 'badminton' || f.game?.slug === 'table-tennis'));
                               setSlotAssignFixture(f);
+                              setSlotMatchFormat(isTeam ? 'team' : 'individual');
+                              setSlotTeamAId(f.team_a_id || '');
                               setSlotTeamAName(f.team_a?.name || '');
+                              setSlotTeamBId(f.team_b_id || '');
                               setSlotTeamBName(f.team_b?.name || '');
+                              setSlotPlayerAId(f.player_a_id || '');
                               setSlotPlayerAName(f.player_a?.name || '');
+                              setSlotPlayerARollNo(f.player_a?.roll_no || '');
+                              setSlotPlayerBId(f.player_b_id || '');
                               setSlotPlayerBName(f.player_b?.name || '');
+                              setSlotPlayerBRollNo(f.player_b?.roll_no || '');
+                              if (f.team_a?.batch_id) setSlotBatchAId(f.team_a.batch_id);
+                              else if (f.player_a?.batch_id) setSlotBatchAId(f.player_a.batch_id);
+                              if (f.team_b?.batch_id) setSlotBatchBId(f.team_b.batch_id);
+                              else if (f.player_b?.batch_id) setSlotBatchBId(f.player_b.batch_id);
                             }}
                             className="text-fog-text hover:text-gold-accent transition-colors"
                             title="Re-assign slot competitors"
