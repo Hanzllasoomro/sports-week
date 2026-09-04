@@ -186,12 +186,20 @@ export default async function HomePage() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 font-display text-lg sm:text-2xl px-2">
+                  <div className="flex items-center gap-2 font-display text-base sm:text-2xl px-2">
                     {isLive || isCompleted ? (
                       <>
-                        <span className="text-white font-bold">{fixture.score_a ?? 0}</span>
+                        <span className="text-white font-bold font-table-numeral">
+                          {fixture.game.slug === 'cricket' && fixture.cricket_details?.team_a_cricket
+                            ? `${fixture.cricket_details.team_a_cricket.runs}/${fixture.cricket_details.team_a_cricket.wickets}`
+                            : fixture.score_a ?? 0}
+                        </span>
                         <span className="text-outline-variant text-base">&ndash;</span>
-                        <span className="text-white font-bold">{fixture.score_b ?? 0}</span>
+                        <span className="text-white font-bold font-table-numeral">
+                          {fixture.game.slug === 'cricket' && fixture.cricket_details?.team_b_cricket
+                            ? `${fixture.cricket_details.team_b_cricket.runs}/${fixture.cricket_details.team_b_cricket.wickets}`
+                            : fixture.score_b ?? 0}
+                        </span>
                       </>
                     ) : (
                       <span className="font-caps-label text-xs text-fog-text uppercase">VS</span>

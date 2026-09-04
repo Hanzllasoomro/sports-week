@@ -145,8 +145,10 @@ export default async function GameDetailPage({ params }: Props) {
 
                   <div className="flex items-center justify-between sm:justify-end gap-4">
                     {(isLive || isCompleted) && (
-                      <div className="font-display text-xl sm:text-2xl text-gold-accent">
-                        {fixture.score_a ?? 0} &ndash; {fixture.score_b ?? 0}
+                      <div className="font-display text-lg sm:text-xl text-gold-accent font-table-numeral">
+                        {game.slug === 'cricket' && fixture.cricket_details?.team_a_cricket
+                          ? `${fixture.cricket_details.team_a_cricket.runs}/${fixture.cricket_details.team_a_cricket.wickets} vs ${fixture.cricket_details.team_b_cricket?.runs ?? fixture.score_b ?? 0}/${fixture.cricket_details.team_b_cricket?.wickets ?? 0}`
+                          : `${fixture.score_a ?? 0} \u2013 ${fixture.score_b ?? 0}`}
                       </div>
                     )}
                     <div>

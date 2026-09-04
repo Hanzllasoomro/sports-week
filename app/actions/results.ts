@@ -16,7 +16,7 @@ export async function saveResult(raw: unknown): Promise<ActionResult<Fixture>> {
     return { error: { message: parsed.error.errors[0].message, code: 'VALIDATION_ERROR' } };
   }
 
-  const { fixture_id, score_a, score_b, status, winner_team_id, winner_player_id } = parsed.data;
+  const { fixture_id, score_a, score_b, status, cricket_details, winner_team_id, winner_player_id } = parsed.data;
 
   // Validate UUID format before inserting/updating in Postgres
   const isValidUuid = (val?: string | null) =>
@@ -41,23 +41,40 @@ export async function saveResult(raw: unknown): Promise<ActionResult<Fixture>> {
       const fallback = MOCK_FIXTURES.find((f) => f.id === fixture_id);
 
       if (fallback) {
-        const { data: inserted, error: insertErr } = await supabase
+        const insertPayload: any = {
+          id: fallback.id,
+          game_id: fallback.game_id,
+          stage: fallback.stage,
+          round: fallback.round,
+          scheduled_at: fallback.scheduled_at,
+          venue: fallback.venue,
+          status,
+          score_a,
+          score_b,
+          winner_team_id: cleanWinnerTeamId,
+          winner_player_id: cleanWinnerPlayerId,
+        };
+        if (cricket_details !== undefined) {
+          insertPayload.cricket_details = cricket_details;
+        }
+
+        let { data: inserted, error: insertErr } = await supabase
           .from('fixtures')
-          .insert({
-            id: fallback.id,
-            game_id: fallback.game_id,
-            stage: fallback.stage,
-            round: fallback.round,
-            scheduled_at: fallback.scheduled_at,
-            venue: fallback.venue,
-            status,
-            score_a,
-            score_b,
-            winner_team_id: cleanWinnerTeamId,
-            winner_player_id: cleanWinnerPlayerId,
-          })
+          .insert(insertPayload)
           .select()
           .single();
+
+        // If insert failed due to missing cricket_details column, retry without it
+        if (insertErr && cricket_details !== undefined) {
+          delete insertPayload.cricket_details;
+          const retry = await supabase
+            .from('fixtures')
+            .insert(insertPayload)
+            .select()
+            .single();
+          inserted = retry.data;
+          insertErr = retry.error;
+        }
 
         if (insertErr) {
           console.error('[saveResult auto-insert failed]', insertErr);
@@ -70,18 +87,36 @@ export async function saveResult(raw: unknown): Promise<ActionResult<Fixture>> {
     let data: any = existing;
 
     if (existing) {
-      const { data: updated, error: updateErr } = await supabase
+      const updatePayload: any = {
+        score_a,
+        score_b,
+        status,
+        winner_team_id: cleanWinnerTeamId,
+        winner_player_id: cleanWinnerPlayerId,
+      };
+      if (cricket_details !== undefined) {
+        updatePayload.cricket_details = cricket_details;
+      }
+
+      let { data: updated, error: updateErr } = await supabase
         .from('fixtures')
-        .update({
-          score_a,
-          score_b,
-          status,
-          winner_team_id: cleanWinnerTeamId,
-          winner_player_id: cleanWinnerPlayerId,
-        })
+        .update(updatePayload)
         .eq('id', fixture_id)
         .select()
         .single();
+
+      // If update failed due to missing cricket_details column, gracefully retry without it
+      if (updateErr && cricket_details !== undefined) {
+        delete updatePayload.cricket_details;
+        const retry = await supabase
+          .from('fixtures')
+          .update(updatePayload)
+          .eq('id', fixture_id)
+          .select()
+          .single();
+        updated = retry.data;
+        updateErr = retry.error;
+      }
 
       if (updateErr) throw updateErr;
       data = updated;

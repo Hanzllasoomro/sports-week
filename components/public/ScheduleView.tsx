@@ -128,6 +128,17 @@ export function ScheduleView({ initialFixtures, games }: ScheduleViewProps) {
             const winnerA = isCompleted && fixture.score_a != null && fixture.score_b != null && fixture.score_a > fixture.score_b;
             const winnerB = isCompleted && fixture.score_a != null && fixture.score_b != null && fixture.score_b > fixture.score_a;
 
+            const isCricket = fixture.game.slug === 'cricket';
+            const cricketA = fixture.cricket_details?.team_a_cricket;
+            const cricketB = fixture.cricket_details?.team_b_cricket;
+
+            const scoreDisplayA = isCricket && cricketA
+              ? `${cricketA.runs}/${cricketA.wickets} (${cricketA.overs})`
+              : fixture.score_a ?? 0;
+            const scoreDisplayB = isCricket && cricketB
+              ? `${cricketB.runs}/${cricketB.wickets} (${cricketB.overs})`
+              : fixture.score_b ?? 0;
+
             return (
               <div
                 key={fixture.id}
@@ -219,11 +230,11 @@ export function ScheduleView({ initialFixtures, games }: ScheduleViewProps) {
                       </div>
                       <span
                         className={cn(
-                          'font-display text-base sm:text-lg',
-                          winnerA ? 'text-win-green font-bold' : 'text-fog-text'
+                          'font-display text-sm sm:text-base font-table-numeral',
+                          winnerA ? 'text-win-green font-bold' : isLive ? 'text-gold-accent font-bold' : 'text-fog-text'
                         )}
                       >
-                        {isLive || isCompleted ? fixture.score_a ?? 0 : '-'}
+                        {isLive || isCompleted ? scoreDisplayA : '-'}
                       </span>
                     </div>
 
@@ -246,11 +257,11 @@ export function ScheduleView({ initialFixtures, games }: ScheduleViewProps) {
                       </div>
                       <span
                         className={cn(
-                          'font-display text-base sm:text-lg',
-                          winnerB ? 'text-win-green font-bold' : 'text-fog-text'
+                          'font-display text-sm sm:text-base font-table-numeral',
+                          winnerB ? 'text-win-green font-bold' : isLive ? 'text-gold-accent font-bold' : 'text-fog-text'
                         )}
                       >
-                        {isLive || isCompleted ? fixture.score_b ?? 0 : '-'}
+                        {isLive || isCompleted ? scoreDisplayB : '-'}
                       </span>
                     </div>
                   </div>

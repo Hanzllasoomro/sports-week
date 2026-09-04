@@ -76,11 +76,15 @@ create table if not exists fixtures (
                    check (status in ('scheduled', 'live', 'completed', 'cancelled')),
   score_a          int,
   score_b          int,
+  cricket_details  jsonb, -- detailed cricket match state (runs, wickets, overs, batsmen, bowler, target, timeline)
   winner_team_id   uuid references teams(id) on delete set null,
   winner_player_id uuid references players(id) on delete set null,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
+
+-- Migration for existing deployments:
+-- alter table fixtures add column if not exists cricket_details jsonb;
 
 -- ─── Individual Results (podium finishes) ───────────────────
 create table if not exists individual_results (

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { saveResult, saveIndividualResult } from '@/app/actions/results';
 import type { FixtureWithRelations, Game, Batch } from '@/types';
 import { MOCK_FIXTURES, MOCK_GAMES, MOCK_BATCHES } from '@/lib/mock-data';
+import { CricketScorerRoom } from '@/components/admin/CricketScorerRoom';
 
 export default function AdminResultsPage() {
   const [fixtures, setFixtures] = useState<FixtureWithRelations[]>(MOCK_FIXTURES);
@@ -91,6 +92,49 @@ export default function AdminResultsPage() {
         prev.map((f) =>
           f.id === selectedFixture.id
             ? { ...f, score_a: scoreA, score_b: scoreB, status }
+            : f
+        )
+      );
+    }
+    setIsSubmitting(false);
+    setTimeout(() => setFeedback(null), 4000);
+  }
+
+  async function handleSaveCricketScore(payload: {
+    scoreA: number;
+    scoreB: number;
+    status: 'live' | 'completed';
+    cricketDetails: any;
+    winnerTeamId?: string | null;
+  }) {
+    if (!selectedFixture) return;
+    setIsSubmitting(true);
+    setFeedback('Broadcasting live cricket scorecard...');
+
+    const res = await saveResult({
+      fixture_id: selectedFixture.id,
+      score_a: payload.scoreA,
+      score_b: payload.scoreB,
+      status: payload.status,
+      cricket_details: payload.cricketDetails,
+      winner_team_id: payload.winnerTeamId,
+    });
+
+    if (res.error) {
+      setFeedback(`Error: ${res.error.message}`);
+    } else {
+      setFeedback('Cricket score saved and broadcasted to live feed!');
+      setFixtures((prev) =>
+        prev.map((f) =>
+          f.id === selectedFixture.id
+            ? {
+                ...f,
+                score_a: payload.scoreA,
+                score_b: payload.scoreB,
+                status: payload.status,
+                cricket_details: payload.cricketDetails,
+                winner_team_id: payload.winnerTeamId,
+              }
             : f
         )
       );
@@ -226,7 +270,14 @@ export default function AdminResultsPage() {
                 </div>
 
                 {selectedFixture && (
-                  <form onSubmit={handleSaveTeamScore}>
+                  selectedFixture.game?.slug === 'cricket' ? (
+                    <CricketScorerRoom
+                      fixture={selectedFixture}
+                      isSubmitting={isSubmitting}
+                      onSave={handleSaveCricketScore}
+                    />
+                  ) : (
+                    <form onSubmit={handleSaveTeamScore}>
                 {/* Match Banner Header */}
                 <div className="p-4 bg-navy-mid rounded border border-outline-variant/20 mb-6 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -387,7 +438,8 @@ export default function AdminResultsPage() {
                   </button>
                 </div>
               </form>
-            )}
+            )
+          )}
           </>
         )}
       </div>

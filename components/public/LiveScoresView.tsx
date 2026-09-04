@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import type { FixtureWithRelations, Game } from '@/types';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
+import { CricketLiveCard } from '@/components/public/CricketLiveCard';
 
 interface LiveScoresViewProps {
   initialFixtures: FixtureWithRelations[];
@@ -165,6 +166,15 @@ export function LiveScoresView({ initialFixtures, games }: LiveScoresViewProps) 
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12">
           {displayMatches.map((fixture) => {
+            // Specialized cricket live scorecard takes full width
+            if (fixture.game.slug === 'cricket') {
+              return (
+                <div key={fixture.id} className="col-span-1 md:col-span-2">
+                  <CricketLiveCard fixture={fixture} />
+                </div>
+              );
+            }
+
             const teamAName = fixture.team_a?.name || fixture.player_a?.name || 'TBD';
             const teamBName = fixture.team_b?.name || fixture.player_b?.name || 'TBD';
             const batchACode = fixture.team_a?.batch?.code || fixture.player_a?.batch?.code || '';

@@ -54,6 +54,57 @@ export type TeamMember = {
 export type FixtureStatus = 'scheduled' | 'live' | 'completed' | 'cancelled';
 export type FixtureStage = 'group' | 'semifinal' | 'final' | 'friendly';
 
+// ─── Cricket specific scoring types ───────────────────────────────────────
+
+export type CricketBatsman = {
+  name: string;
+  runs: number;
+  balls: number;
+  fours: number;
+  sixes: number;
+  is_on_strike?: boolean;
+  how_out?: string; // e.g. "b Hamza", "not out", "c Ali b Zaid"
+};
+
+export type CricketBowler = {
+  name: string;
+  overs: string; // e.g. "1.4"
+  maidens: number;
+  runs_conceded: number;
+  wickets: number;
+};
+
+export type CricketExtras = {
+  wides: number;
+  no_balls: number;
+  byes: number;
+  leg_byes: number;
+  total: number;
+};
+
+export type CricketInningsScore = {
+  runs: number;
+  wickets: number; // 0 to 10
+  overs: string;   // e.g. "4.3"
+  extras?: CricketExtras;
+};
+
+export type CricketMatchDetails = {
+  innings: 1 | 2;
+  batting_team_id: string; // id of team currently batting (e.g. team_a_id or team_b_id)
+  overs_limit: number;    // e.g. 6 or 8
+  target?: number | null; // target score for 2nd innings
+  team_a_cricket: CricketInningsScore;
+  team_b_cricket: CricketInningsScore;
+  current_batsmen?: CricketBatsman[];
+  current_bowler?: CricketBowler;
+  recent_balls?: string[]; // e.g. ["1", "4", "W", "0", "6", "1wd"]
+  crr?: number;            // Current Run Rate
+  rrr?: number | null;     // Required Run Rate
+  status_note?: string;    // e.g. "24SW need 14 runs in 8 balls"
+  toss_note?: string;      // e.g. "24SW won the toss and elected to bat"
+};
+
 export type Fixture = {
   id: string;
   game_id: string;
@@ -69,6 +120,7 @@ export type Fixture = {
   status: FixtureStatus;
   score_a?: number | null;
   score_b?: number | null;
+  cricket_details?: CricketMatchDetails | null;
   winner_team_id?: string | null;
   winner_player_id?: string | null;
   game?: Game;

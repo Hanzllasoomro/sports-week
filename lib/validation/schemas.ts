@@ -19,6 +19,7 @@ export const FixtureUpdateSchema = FixtureCreateSchema.partial().extend({
   status:   z.enum(['scheduled', 'live', 'completed', 'cancelled']).optional(),
   score_a:  z.number().int().min(0).optional(),
   score_b:  z.number().int().min(0).optional(),
+  cricket_details: z.any().optional().nullable(),
   winner_team_id:   z.string().optional().nullable(),
   winner_player_id: z.string().optional().nullable(),
 });
@@ -28,6 +29,7 @@ export const ScoreEntrySchema = z.object({
   score_a:          z.number({ invalid_type_error: 'Score must be a whole number' }).int().min(0),
   score_b:          z.number({ invalid_type_error: 'Score must be a whole number' }).int().min(0),
   status:           z.enum(['scheduled', 'live', 'completed', 'cancelled']),
+  cricket_details:  z.any().optional().nullable(),
   winner_team_id:   z.string().optional().nullable(),
   winner_player_id: z.string().optional().nullable(),
 });
