@@ -38,10 +38,10 @@ export function LiveScoresView({ initialFixtures, games }: LiveScoresViewProps) 
       // Supabase realtime unconfigured or offline
     }
 
-    // 2. Fallback polling interval every 20 seconds
+    // 2. Fallback polling interval every 8 seconds for near-realtime updates
     const interval = setInterval(() => {
       refreshScores();
-    }, 20000);
+    }, 8000);
 
     return () => {
       clearInterval(interval);
@@ -96,6 +96,8 @@ export function LiveScoresView({ initialFixtures, games }: LiveScoresViewProps) 
           <span className="hidden sm:inline" suppressHydrationWarning>
             Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </span>
+          <span className="text-outline-variant hidden sm:inline">&bull;</span>
+          <span className="hidden sm:inline text-fog-text/60">Refreshes every 8s</span>
         </div>
 
         <button

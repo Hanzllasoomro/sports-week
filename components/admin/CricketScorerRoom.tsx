@@ -432,17 +432,18 @@ export function CricketScorerRoom({
         ? 4
         : action === '6'
         ? 6
-        : 1; // Wide or No-ball
+        : 1; // Wide or No-ball penalty run (extra, not striker's personal runs)
 
     const isLegalBall = action !== 'Wd' && action !== 'Nb';
+    const isExtra = action === 'Wd' || action === 'Nb';
 
-    // 1. Calculate Team Runs
+    // 1. Calculate Team Runs — extras count toward team total
     const newRunsA = isBattingA ? runsA + runsToAdd : runsA;
     const newRunsB = !isBattingA ? runsB + runsToAdd : runsB;
     if (isBattingA) setRunsA(newRunsA);
     else setRunsB(newRunsB);
 
-    // 2. Calculate Overs & Over Completion
+    // 2. Calculate Overs & Over Completion — Wide/NoBall do NOT count as a fair delivery
     let newOversA = oversA;
     let newOversB = oversB;
     let overCompleted = false;
@@ -461,7 +462,7 @@ export function CricketScorerRoom({
       }
     }
 
-    // 3. Update Bowler Figures
+    // 3. Update Bowler Figures — Wide/NoBall adds to runs_conceded but NOT to bowler's over count
     let newBowlerOvers = bowler.overs || '0.0';
     if (isLegalBall) {
       newBowlerOvers = incrementOvers(bowler.overs || '0.0').newOvers;
@@ -473,7 +474,7 @@ export function CricketScorerRoom({
     };
     setBowler(newBowler);
 
-    // 4. Update Batsmen stats & Automatic Strike Swap
+    // 4. Update Batsmen stats — extras do NOT add to striker's personal stats
     const updatedBatsmen = batsmen.map((b) => ({ ...b }));
     const strikerIdx = updatedBatsmen.findIndex((b) => b.is_on_strike) !== -1
       ? updatedBatsmen.findIndex((b) => b.is_on_strike)
@@ -481,25 +482,32 @@ export function CricketScorerRoom({
     const nonStrikerIdx = strikerIdx === 0 ? 1 : 0;
 
     if (isLegalBall) {
+      // Legal balls only: runs and ball count attributed to striker's card
       updatedBatsmen[strikerIdx].runs += runsToAdd;
       updatedBatsmen[strikerIdx].balls += 1;
       if (action === '4') updatedBatsmen[strikerIdx].fours += 1;
       if (action === '6') updatedBatsmen[strikerIdx].sixes += 1;
     }
+    // Wide/NoBall: NO ball counted, NO runs added to striker — pure team extra
 
     // ── Auto Swap Rule ──
-    // Odd runs (1, 3): Batsmen cross.
-    // End of over: Bowling end changes, so ends swap again.
+    // Wide/NoBall: NEVER swap strike — the delivery is re-bowled, same batsman faces again.
+    // Odd legal runs (1, 3): Batsmen cross — swap striker.
+    // End of over (legal ball 6): Non-striker comes to face — guaranteed swap.
     let strikeSwapped = false;
-    const isOddRun = runsToAdd % 2 === 1;
 
-    if (isOddRun) {
-      strikeSwapped = !strikeSwapped;
+    if (!isExtra) {
+      // Only evaluate swap on legal deliveries
+      const isOddRun = runsToAdd % 2 === 1;
+      if (isOddRun) {
+        strikeSwapped = !strikeSwapped;
+      }
+      if (overCompleted) {
+        // Non-striker comes to face at start of next over
+        strikeSwapped = !strikeSwapped;
+      }
     }
-    if (overCompleted) {
-      // Over ends: ends switch
-      strikeSwapped = !strikeSwapped;
-    }
+    // isExtra: strikeSwapped stays false — no swap on Wide or NoBall
 
     if (strikeSwapped) {
       updatedBatsmen[strikerIdx].is_on_strike = false;
@@ -508,16 +516,24 @@ export function CricketScorerRoom({
 
     setBatsmen(updatedBatsmen);
 
-    // 5. Append recent ball
-    const ballLabel = action === 'Wd' ? '1wd' : action === 'Nb' ? '1nb' : action;
-    const newRecentBalls = [...recentBalls, ballLabel].slice(-12);
+    // 5. Append recent ball to current-over timeline
+    // On over completion: reset timeline to fresh empty list for the new over
+    const ballLabel = action === 'Wd' ? 'wd' : action === 'Nb' ? 'nb' : action;
+    let newRecentBalls: string[];
+    if (overCompleted) {
+      // Over ended — clear timeline for fresh over
+      newRecentBalls = [];
+    } else {
+      // Keep up to 7 balls per over (6 legal + possible extras)
+      newRecentBalls = [...recentBalls, ballLabel].slice(-7);
+    }
     setRecentBalls(newRecentBalls);
 
-    // 6. Check Over Completion prompt
+    // 6. Check Over Completion — show notification with completed over number
     if (overCompleted) {
-      const activeOvers = isBattingA ? newOversA : newOversB;
+      const completedOverNum = parseInt((isBattingA ? newOversA : newOversB).split('.')[0], 10) - 1;
       setOverCompleteNotification(
-        `🔔 Over ${activeOvers.split('.')[0]} completed! Strike auto-rotated. Please select the next bowler below.`
+        `✅ Over ${completedOverNum} Complete! Non-striker now faces. Please select the next bowler.`
       );
     } else {
       setOverCompleteNotification(null);
@@ -1218,23 +1234,25 @@ export function CricketScorerRoom({
           <button
             type="button"
             onClick={() => handleRecordBall('Wd')}
-            className="py-3.5 bg-amber-500 text-navy-deep hover:bg-amber-400 rounded font-display text-sm font-extrabold cursor-pointer transition-all shadow hover:scale-[1.03] active:scale-95"
+            className="py-3.5 bg-amber-500 text-navy-deep hover:bg-amber-400 rounded font-display text-sm font-extrabold cursor-pointer transition-all shadow hover:scale-[1.03] active:scale-95 flex flex-col items-center justify-center leading-tight"
           >
-            +1 Wide
+            <span>+1 Wide</span>
+            <span className="text-[10px] font-sans font-semibold opacity-70">Extra · Re-Bowl</span>
           </button>
           <button
             type="button"
             onClick={() => handleRecordBall('Nb')}
-            className="py-3.5 bg-amber-600 text-navy-deep hover:bg-amber-500 rounded font-display text-sm font-extrabold cursor-pointer transition-all shadow hover:scale-[1.03] active:scale-95"
+            className="py-3.5 bg-amber-600 text-navy-deep hover:bg-amber-500 rounded font-display text-sm font-extrabold cursor-pointer transition-all shadow hover:scale-[1.03] active:scale-95 flex flex-col items-center justify-center leading-tight"
           >
-            +1 No Ball
+            <span>+1 No Ball</span>
+            <span className="text-[10px] font-sans font-semibold opacity-70">Extra · Re-Bowl</span>
           </button>
         </div>
 
-        {/* Timeline of deliveries */}
+        {/* Timeline of deliveries — resets each over */}
         <div className="pt-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
           <span className="text-[10px] font-caps-label text-fog-text uppercase shrink-0">
-            Current Over Timeline:
+            This Over:
           </span>
           {recentBalls.length === 0 ? (
             <span className="text-xs text-fog-text italic">Tap any ball button to begin scoring</span>
