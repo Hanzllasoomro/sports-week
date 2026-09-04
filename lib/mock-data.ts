@@ -254,11 +254,11 @@ export const MOCK_FIXTURES: FixtureWithRelations[] = [
         extras: { wides: 4, no_balls: 2, byes: 0, leg_byes: 1, total: 7 },
       },
       current_batsmen: [
-        { name: 'Ali Khan', runs: 42, balls: 18, fours: 4, sixes: 3, is_on_strike: true },
-        { name: 'Zubair Ahmed', runs: 16, balls: 10, fours: 2, sixes: 0, is_on_strike: false },
+        { name: 'Bilal Ahmed', runs: 42, balls: 18, fours: 4, sixes: 3, is_on_strike: true },
+        { name: 'Shahmeer Tariq', runs: 16, balls: 10, fours: 2, sixes: 0, is_on_strike: false },
       ],
       current_bowler: {
-        name: 'Hamza Farooq',
+        name: 'Zaid Khan',
         overs: '1.4',
         maidens: 0,
         runs_conceded: 18,
@@ -268,7 +268,7 @@ export const MOCK_FIXTURES: FixtureWithRelations[] = [
       crr: 16.71,
       rrr: 8.25,
       status_note: '24SW Strikers need 11 runs in 8 balls to win',
-      toss_note: '24SW won the toss & elected to bowl first',
+      toss_note: '24SW won the toss & elected to bat first',
     },
     game: MOCK_GAMES[0],
     team_a: {

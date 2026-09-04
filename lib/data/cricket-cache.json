@@ -1,0 +1,104 @@
+{
+  "64487c0d-d316-4037-a563-a073369abec3": {
+    "innings": 1,
+    "batting_team_id": "948cf95e-964c-488c-bbd7-9da237b27453",
+    "overs_limit": 6,
+    "target": 89,
+    "team_a_cricket": {
+      "runs": 78,
+      "wickets": 3,
+      "overs": "4.4"
+    },
+    "team_b_cricket": {
+      "runs": 88,
+      "wickets": 4,
+      "overs": "6.0"
+    },
+    "current_batsmen": [
+      {
+        "name": "Ali Raza",
+        "runs": 0,
+        "balls": 0,
+        "fours": 0,
+        "sixes": 0,
+        "is_on_strike": true
+      },
+      {
+        "name": "Bilal Ahmed",
+        "runs": 0,
+        "balls": 0,
+        "fours": 0,
+        "sixes": 0,
+        "is_on_strike": false
+      }
+    ],
+    "current_bowler": {
+      "name": "Arsalan Laghari",
+      "overs": "0.0",
+      "maidens": 0,
+      "runs_conceded": 0,
+      "wickets": 0
+    },
+    "batsmen_card": [],
+    "bowlers_card": [],
+    "recent_balls": [
+      "1",
+      "4",
+      "W",
+      "0",
+      "6",
+      "1"
+    ],
+    "crr": 16.71,
+    "rrr": 8.25,
+    "status_note": "24SW Strikers need 11 runs in 8 balls to win",
+    "toss_note": "24SW won the toss & elected to bowl first"
+  },
+  "2e205361-691e-4b0f-9ba2-5a9ff07738e4": {
+    "innings": 1,
+    "batting_team_id": "team_b",
+    "overs_limit": 6,
+    "target": null,
+    "team_a_cricket": {
+      "runs": 0,
+      "wickets": 0,
+      "overs": "0.0"
+    },
+    "team_b_cricket": {
+      "runs": 0,
+      "wickets": 0,
+      "overs": "0.0"
+    },
+    "current_batsmen": [
+      {
+        "name": "Arsalan Laghari",
+        "runs": 0,
+        "balls": 0,
+        "fours": 0,
+        "sixes": 0,
+        "is_on_strike": true
+      },
+      {
+        "name": "Asad Brohi",
+        "runs": 0,
+        "balls": 0,
+        "fours": 0,
+        "sixes": 0,
+        "is_on_strike": false
+      }
+    ],
+    "current_bowler": {
+      "name": "Ali Raza",
+      "overs": "0.0",
+      "maidens": 0,
+      "runs_conceded": 0,
+      "wickets": 0
+    },
+    "batsmen_card": [],
+    "bowlers_card": [],
+    "recent_balls": [],
+    "crr": 0,
+    "rrr": null,
+    "toss_note": "Team A won the toss & elected to bat"
+  }
+}

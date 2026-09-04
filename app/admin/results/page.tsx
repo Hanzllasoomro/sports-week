@@ -285,6 +285,7 @@ export default function AdminResultsPage() {
                 {selectedFixture && (
                   selectedFixture.game?.slug === 'cricket' ? (
                     <CricketScorerRoom
+                      key={selectedFixture.id}
                       fixture={selectedFixture}
                       players={players}
                       isSubmitting={isSubmitting}

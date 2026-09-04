@@ -1,0 +1,55 @@
+{
+  "948cf95e-964c-488c-bbd7-9da237b27453": {
+    "team_id": "948cf95e-964c-488c-bbd7-9da237b27453",
+    "playing_player_ids": [
+      "4b861441-b420-426d-b4a9-f3401c4fb688",
+      "a73a9b71-1f59-425e-b6d4-7ffe534a3d9a",
+      "9f65a15c-919e-4e5a-8a1a-41de2d48432a",
+      "7d128f94-744c-4d0d-8b48-18d3e710ccb9",
+      "2699c895-c6bd-4185-996d-90067bc1a039",
+      "889e12d5-28d8-405d-9fa3-c3a515b6f52f",
+      "d6106ee9-4131-4fe3-a0b8-deef0278671e",
+      "25cbc29e-8929-4a88-b564-6f2184177f5c",
+      "1250c7e3-3116-42c4-9f25-88c892cc0b3b",
+      "e2ce8513-ca15-4398-bf7a-e50c98633c01",
+      "e9b0fa28-d0e4-40e3-bd1f-2ba6fbba66e7"
+    ],
+    "optional_player_ids": [],
+    "updated_at": "2026-09-04T16:20:19.356Z"
+  },
+  "ccbc3366-9d90-4112-90e9-516d0201ed60": {
+    "team_id": "ccbc3366-9d90-4112-90e9-516d0201ed60",
+    "playing_player_ids": [
+      "e4af2f33-13fe-4036-b5bc-032a3384b161",
+      "a4064799-0a20-4e93-a858-99bdeb9c1059",
+      "4e1753de-9717-456e-9848-d2d9ab469f55",
+      "1f760d56-a748-433a-a265-a5078085ba55",
+      "fad002a0-5a40-4d3b-92b9-66a003ead947",
+      "cebf6aae-a8c4-4914-87b1-c3331e0bce0e",
+      "6cfab899-0263-4a05-b9e3-6374537cd4d3",
+      "a4b67e66-5244-47fd-8b35-fe492e23bdb3",
+      "34b76d3d-5ccb-4ef7-8a81-690c345155b1",
+      "affd4f09-8df1-4eea-af5d-f94a3abd113c"
+    ],
+    "optional_player_ids": [],
+    "updated_at": "2026-09-04T16:20:22.322Z"
+  },
+  "cb3ba014-95e9-4fce-a459-b6f25b4958c7": {
+    "team_id": "cb3ba014-95e9-4fce-a459-b6f25b4958c7",
+    "playing_player_ids": [
+      "618d45d5-4428-42f4-b537-e3befc8ce0b0",
+      "e9e988d3-536a-4bf9-9016-40e354cb37fe",
+      "430d4d7b-3e9f-4a00-96b2-eda082617e74",
+      "67d458c7-cd36-43af-b4e0-32efc7529843",
+      "f0b8c7e6-8e46-41d2-acb5-ed4f7e3ae218",
+      "029e2a54-8a92-4585-ac43-6b038e7ee808",
+      "513f0b1b-bcbb-465b-b188-4f14f2b59646",
+      "edbde4a3-f303-4ff0-b540-eeba3fe1c8cf",
+      "f31be232-7f7e-4b03-91a3-5ca0e382a4fa",
+      "a1d6feb8-4b58-4017-b578-84157dfa6016",
+      "05663036-a9e5-4217-b96c-acba4e461027"
+    ],
+    "optional_player_ids": [],
+    "updated_at": "2026-09-04T16:37:10.208Z"
+  }
+}

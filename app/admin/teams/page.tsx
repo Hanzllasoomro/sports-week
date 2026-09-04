@@ -1,32 +1,53 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createTeam, updateTeam, deleteTeam } from '@/app/actions/roster';
+import { createTeam, updateTeam, deleteTeam, createPlayer } from '@/app/actions/roster';
 import { MOCK_BATCHES, MOCK_GAMES } from '@/lib/mock-data';
+import { getSquadRulesForGame } from '@/lib/constants/squad-rules';
+import { cn } from '@/lib/utils';
+import type { Player } from '@/types';
 
 export default function AdminTeamsPage() {
   const [teams, setTeams] = useState<any[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
 
   const [isAdding, setIsAdding] = useState(false);
   const [editingTeam, setEditingTeam] = useState<any | null>(null);
   const [deletingTeam, setDeletingTeam] = useState<any | null>(null);
+  const [viewingSquadTeam, setViewingSquadTeam] = useState<any | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
 
+  // Search filter for available player pool in builder
+  const [playerSearchQuery, setPlayerSearchQuery] = useState('');
+
+  // Inline Quick Player Add state
+  const [showQuickAddPlayer, setShowQuickAddPlayer] = useState(false);
+  const [quickPlayerName, setQuickPlayerName] = useState('');
+  const [quickPlayerRoll, setQuickPlayerRoll] = useState('');
+  const [isQuickAdding, setIsQuickAdding] = useState(false);
+
+  // Add Form State with squad selections
   const [formData, setFormData] = useState({
     name: '',
     game_id: MOCK_GAMES[0].id,
     batch_id: MOCK_BATCHES[2].id,
     gender: 'boys' as 'boys' | 'girls',
+    playing_player_ids: [] as string[],
+    optional_player_ids: [] as string[],
   });
 
-  // Load real teams on mount
+  // Load real teams & registered players on mount
   useEffect(() => {
-    async function loadTeams() {
+    async function loadData() {
       try {
-        const res = await fetch('/api/teams');
-        if (res.ok) {
-          const data = await res.json();
+        const [teamsRes, playersRes] = await Promise.all([
+          fetch('/api/teams'),
+          fetch('/api/players'),
+        ]);
+
+        if (teamsRes.ok) {
+          const data = await teamsRes.json();
           if (Array.isArray(data)) {
             setTeams(
               data.map((t: any) => ({
@@ -34,35 +55,236 @@ export default function AdminTeamsPage() {
                 name: t.name,
                 game_id: t.game_id || MOCK_GAMES[0].id,
                 game: t.game?.name || MOCK_GAMES.find((g) => g.id === t.game_id)?.name || 'Team Sport',
+                game_slug: t.game?.slug || MOCK_GAMES.find((g) => g.id === t.game_id)?.slug || 'cricket',
                 batch_id: t.batch_id,
                 batch: t.batch?.code || MOCK_BATCHES.find((b) => b.id === t.batch_id)?.code || 'Batch',
                 gender: t.gender,
+                playing_player_ids: t.playing_player_ids || [],
+                optional_player_ids: t.optional_player_ids || [],
+                playing_players: t.playing_players || [],
+                optional_players: t.optional_players || [],
+                squad_count: t.squad_count || (t.playing_player_ids?.length || 0) + (t.optional_player_ids?.length || 0),
               }))
             );
           }
         }
+
+        if (playersRes.ok) {
+          const playData = await playersRes.json();
+          if (Array.isArray(playData)) {
+            setPlayers(playData);
+          }
+        }
       } catch (err) {
-        console.error('Failed to load teams', err);
+        console.error('Failed to load teams or players', err);
       }
     }
-    loadTeams();
+    loadData();
   }, []);
 
+  // Compute active sport squad rules for active form (Add or Edit)
+  const activeGameId = isAdding ? formData.game_id : editingTeam?.game_id;
+  const activeGame = MOCK_GAMES.find((g) => g.id === activeGameId) || MOCK_GAMES[0];
+  const squadRules = getSquadRulesForGame(activeGame.slug);
+
+  const activeBatchId = isAdding ? formData.batch_id : editingTeam?.batch_id;
+  const activeGender = isAdding ? formData.gender : editingTeam?.gender;
+
+  // Filter pool of athletes registered for the selected batch
+  const batchAthletes = players.filter((p) => {
+    const matchesBatch = p.batch_id === activeBatchId || p.batch?.id === activeBatchId;
+    const matchesGender = activeGame.gender === 'both' || p.gender === activeGender;
+    return matchesBatch && matchesGender;
+  });
+
+  // Current selections
+  const currentPlayingIds: string[] = isAdding
+    ? formData.playing_player_ids
+    : editingTeam?.playing_player_ids || [];
+  const currentOptionalIds: string[] = isAdding
+    ? formData.optional_player_ids
+    : editingTeam?.optional_player_ids || [];
+
+  const unassignedAthletes = batchAthletes.filter(
+    (p) => !currentPlayingIds.includes(p.id) && !currentOptionalIds.includes(p.id)
+  );
+
+  const filteredUnassignedAthletes = unassignedAthletes.filter((p) => {
+    if (!playerSearchQuery.trim()) return true;
+    const q = playerSearchQuery.toLowerCase();
+    return p.name.toLowerCase().includes(q) || (p.roll_no && p.roll_no.toLowerCase().includes(q));
+  });
+
+  // ── Squad Roster Manipulation Handlers ──
+  function handleAddToPlaying(playerId: string) {
+    if (currentPlayingIds.length >= squadRules.playingCount) return;
+    if (isAdding) {
+      setFormData((prev) => ({
+        ...prev,
+        playing_player_ids: [...prev.playing_player_ids, playerId],
+        optional_player_ids: prev.optional_player_ids.filter((id) => id !== playerId),
+      }));
+    } else if (editingTeam) {
+      setEditingTeam((prev: any) => ({
+        ...prev,
+        playing_player_ids: [...(prev.playing_player_ids || []), playerId],
+        optional_player_ids: (prev.optional_player_ids || []).filter((id: string) => id !== playerId),
+      }));
+    }
+  }
+
+  function handleAddToOptional(playerId: string) {
+    if (currentOptionalIds.length >= squadRules.optionalCount) return;
+    if (isAdding) {
+      setFormData((prev) => ({
+        ...prev,
+        optional_player_ids: [...prev.optional_player_ids, playerId],
+        playing_player_ids: prev.playing_player_ids.filter((id) => id !== playerId),
+      }));
+    } else if (editingTeam) {
+      setEditingTeam((prev: any) => ({
+        ...prev,
+        optional_player_ids: [...(prev.optional_player_ids || []), playerId],
+        playing_player_ids: (prev.playing_player_ids || []).filter((id: string) => id !== playerId),
+      }));
+    }
+  }
+
+  function handleRemoveFromSquad(playerId: string) {
+    if (isAdding) {
+      setFormData((prev) => ({
+        ...prev,
+        playing_player_ids: prev.playing_player_ids.filter((id) => id !== playerId),
+        optional_player_ids: prev.optional_player_ids.filter((id) => id !== playerId),
+      }));
+    } else if (editingTeam) {
+      setEditingTeam((prev: any) => ({
+        ...prev,
+        playing_player_ids: (prev.playing_player_ids || []).filter((id: string) => id !== playerId),
+        optional_player_ids: (prev.optional_player_ids || []).filter((id: string) => id !== playerId),
+      }));
+    }
+  }
+
+  function handlePromoteToPlaying(playerId: string) {
+    if (currentPlayingIds.length >= squadRules.playingCount) return;
+    if (isAdding) {
+      setFormData((prev) => ({
+        ...prev,
+        optional_player_ids: prev.optional_player_ids.filter((id) => id !== playerId),
+        playing_player_ids: [...prev.playing_player_ids, playerId],
+      }));
+    } else if (editingTeam) {
+      setEditingTeam((prev: any) => ({
+        ...prev,
+        optional_player_ids: (prev.optional_player_ids || []).filter((id: string) => id !== playerId),
+        playing_player_ids: [...(prev.playing_player_ids || []), playerId],
+      }));
+    }
+  }
+
+  function handleDemoteToOptional(playerId: string) {
+    if (currentOptionalIds.length >= squadRules.optionalCount) return;
+    if (isAdding) {
+      setFormData((prev) => ({
+        ...prev,
+        playing_player_ids: prev.playing_player_ids.filter((id) => id !== playerId),
+        optional_player_ids: [...prev.optional_player_ids, playerId],
+      }));
+    } else if (editingTeam) {
+      setEditingTeam((prev: any) => ({
+        ...prev,
+        playing_player_ids: (prev.playing_player_ids || []).filter((id: string) => id !== playerId),
+        optional_player_ids: [...(prev.optional_player_ids || []), playerId],
+      }));
+    }
+  }
+
+  // 1-Click Auto Fill from Available Batch Pool
+  function handleAutoFillSquad() {
+    const neededPlaying = squadRules.playingCount - currentPlayingIds.length;
+    const neededOptional = squadRules.optionalCount - currentOptionalIds.length;
+
+    const toAddPlaying = unassignedAthletes.slice(0, neededPlaying).map((p) => p.id);
+    const remainingAfterPlaying = unassignedAthletes.slice(neededPlaying);
+    const toAddOptional = remainingAfterPlaying.slice(0, neededOptional).map((p) => p.id);
+
+    if (isAdding) {
+      setFormData((prev) => ({
+        ...prev,
+        playing_player_ids: [...prev.playing_player_ids, ...toAddPlaying],
+        optional_player_ids: [...prev.optional_player_ids, ...toAddOptional],
+      }));
+    } else if (editingTeam) {
+      setEditingTeam((prev: any) => ({
+        ...prev,
+        playing_player_ids: [...(prev.playing_player_ids || []), ...toAddPlaying],
+        optional_player_ids: [...(prev.optional_player_ids || []), ...toAddOptional],
+      }));
+    }
+  }
+
+  // Inline Quick Athlete Registration Handler
+  async function handleQuickAddAthlete(e: React.FormEvent) {
+    e.preventDefault();
+    if (!quickPlayerName.trim()) return;
+
+    setIsQuickAdding(true);
+    const res = await createPlayer({
+      name: quickPlayerName.trim(),
+      roll_no: quickPlayerRoll.trim() || undefined,
+      batch_id: activeBatchId,
+      gender: activeGender,
+    });
+
+    if (res.error) {
+      setFeedback(`Could not register athlete: ${res.error.message}`);
+    } else {
+      const newPlayer: Player = res.data || {
+        id: `p-quick-${Date.now()}`,
+        name: quickPlayerName.trim(),
+        roll_no: quickPlayerRoll.trim(),
+        batch_id: activeBatchId,
+        gender: activeGender,
+      };
+
+      setPlayers((prev) => [...prev, newPlayer]);
+
+      // Automatically slot into playing lineup if space exists, otherwise optional
+      if (currentPlayingIds.length < squadRules.playingCount) {
+        handleAddToPlaying(newPlayer.id);
+      } else if (currentOptionalIds.length < squadRules.optionalCount) {
+        handleAddToOptional(newPlayer.id);
+      }
+
+      setQuickPlayerName('');
+      setQuickPlayerRoll('');
+      setShowQuickAddPlayer(false);
+      setFeedback(`Athlete ${newPlayer.name} registered and drafted into squad!`);
+      setTimeout(() => setFeedback(null), 3000);
+    }
+    setIsQuickAdding(false);
+  }
+
+  // ── Team CRUD Handlers ──
   async function handleAddTeam(e: React.FormEvent) {
     e.preventDefault();
     if (!formData.name) return;
 
-    setFeedback('Creating team in database...');
+    setFeedback('Creating team & locking in squad lineup in tournament database...');
     const res = await createTeam(formData);
 
     if (res.error) {
       setFeedback(`Note: ${res.error.message} (Optimistically added)`);
     } else {
-      setFeedback('Squad registered successfully in tournament records!');
+      setFeedback(`Squad ${formData.name} registered with ${formData.playing_player_ids.length} Playing + ${formData.optional_player_ids.length} Optional players!`);
     }
 
     const g = MOCK_GAMES.find((x) => x.id === formData.game_id);
     const b = MOCK_BATCHES.find((x) => x.id === formData.batch_id);
+
+    const playingPlayers = players.filter((p) => formData.playing_player_ids.includes(p.id));
+    const optionalPlayers = players.filter((p) => formData.optional_player_ids.includes(p.id));
 
     setTeams([
       {
@@ -70,38 +292,56 @@ export default function AdminTeamsPage() {
         name: formData.name,
         game_id: formData.game_id,
         game: g?.name || 'Sport',
+        game_slug: g?.slug || 'cricket',
         batch_id: formData.batch_id,
         batch: b?.code || 'Batch',
         gender: formData.gender,
+        playing_player_ids: formData.playing_player_ids,
+        optional_player_ids: formData.optional_player_ids,
+        playing_players: playingPlayers,
+        optional_players: optionalPlayers,
+        squad_count: formData.playing_player_ids.length + formData.optional_player_ids.length,
       },
       ...teams,
     ]);
 
     setIsAdding(false);
-    setFormData({ name: '', game_id: MOCK_GAMES[0].id, batch_id: MOCK_BATCHES[2].id, gender: 'boys' });
-    setTimeout(() => setFeedback(null), 3500);
+    setFormData({
+      name: '',
+      game_id: MOCK_GAMES[0].id,
+      batch_id: MOCK_BATCHES[2].id,
+      gender: 'boys',
+      playing_player_ids: [],
+      optional_player_ids: [],
+    });
+    setTimeout(() => setFeedback(null), 4000);
   }
 
   async function handleUpdateTeam(e: React.FormEvent) {
     e.preventDefault();
     if (!editingTeam) return;
 
-    setFeedback(`Updating squad ${editingTeam.name}...`);
+    setFeedback(`Updating squad ${editingTeam.name} & roster...`);
     const res = await updateTeam(editingTeam.id, {
       name: editingTeam.name,
       game_id: editingTeam.game_id,
       batch_id: editingTeam.batch_id,
       gender: editingTeam.gender,
+      playing_player_ids: editingTeam.playing_player_ids || [],
+      optional_player_ids: editingTeam.optional_player_ids || [],
     });
 
     if (res.error) {
       setFeedback(`Note: ${res.error.message} (Updated locally)`);
     } else {
-      setFeedback('Squad details updated successfully!');
+      setFeedback('Squad details and lineup updated successfully!');
     }
 
     const g = MOCK_GAMES.find((x) => x.id === editingTeam.game_id);
     const b = MOCK_BATCHES.find((x) => x.id === editingTeam.batch_id);
+
+    const playingPlayers = players.filter((p) => (editingTeam.playing_player_ids || []).includes(p.id));
+    const optionalPlayers = players.filter((p) => (editingTeam.optional_player_ids || []).includes(p.id));
 
     setTeams(
       teams.map((t) =>
@@ -109,13 +349,17 @@ export default function AdminTeamsPage() {
           ? {
               ...editingTeam,
               game: g?.name || t.game,
+              game_slug: g?.slug || t.game_slug,
               batch: b?.code || t.batch,
+              playing_players: playingPlayers,
+              optional_players: optionalPlayers,
+              squad_count: (editingTeam.playing_player_ids?.length || 0) + (editingTeam.optional_player_ids?.length || 0),
             }
           : t
       )
     );
     setEditingTeam(null);
-    setTimeout(() => setFeedback(null), 3500);
+    setTimeout(() => setFeedback(null), 4000);
   }
 
   async function handleConfirmDelete() {
@@ -140,6 +384,299 @@ export default function AdminTeamsPage() {
     setTimeout(() => setFeedback(null), 3500);
   }
 
+  // ── Helper to Render Squad Builder Inside Form ──
+  function renderSquadBuilder() {
+    const playingPlayers = players.filter((p) => currentPlayingIds.includes(p.id));
+    const optionalPlayers = players.filter((p) => currentOptionalIds.includes(p.id));
+
+    const isPlayingFull = currentPlayingIds.length >= squadRules.playingCount;
+    const isOptionalFull = currentOptionalIds.length >= squadRules.optionalCount;
+
+    return (
+      <div className="space-y-4 pt-4 border-t border-outline-variant/30">
+        {/* Rules Banner */}
+        <div className="p-3.5 bg-navy-mid border-2 border-gold-accent/60 rounded flex flex-wrap items-center justify-between gap-3 shadow">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-gold-accent text-xl">groups</span>
+            <div>
+              <div className="font-caps-label text-xs uppercase text-white font-extrabold flex items-center gap-2">
+                <span>{activeGame.name.toUpperCase()} SQUAD SPECIFICATIONS</span>
+                <span className="px-2 py-0.5 rounded bg-gold-accent text-navy-deep font-bold text-[10px]">
+                  {squadRules.playingCount} + {squadRules.optionalCount} (MAX {squadRules.totalMax})
+                </span>
+              </div>
+              <p className="text-[11px] text-fog-text">
+                {squadRules.playingCount} {squadRules.playingLabel} &bull; {squadRules.optionalCount} {squadRules.optionalLabel}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {unassignedAthletes.length > 0 && (
+              <button
+                type="button"
+                onClick={handleAutoFillSquad}
+                className="px-3 py-1.5 bg-surface-container-high hover:bg-gold-accent hover:text-navy-deep text-gold-accent font-caps-label text-[11px] uppercase font-bold rounded transition-colors cursor-pointer flex items-center gap-1 border border-gold-accent/40"
+              >
+                <span className="material-symbols-outlined text-sm">auto_fix_high</span>
+                <span>Auto-Fill from Batch ({unassignedAthletes.length} avail)</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowQuickAddPlayer(!showQuickAddPlayer)}
+              className="px-3 py-1.5 bg-gold-accent text-navy-deep font-caps-label text-[11px] uppercase font-extrabold rounded hover:bg-white transition-colors cursor-pointer flex items-center gap-1"
+            >
+              <span className="material-symbols-outlined text-sm">person_add</span>
+              <span>Quick Register Athlete</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Add Inline Modal/Form */}
+        {showQuickAddPlayer && (
+          <div className="p-3.5 bg-surface-container-lowest border border-gold-accent rounded space-y-2">
+            <span className="font-caps-label text-xs uppercase text-gold-accent font-bold block">
+              Quick Register New Athlete for Batch {MOCK_BATCHES.find((b) => b.id === activeBatchId)?.code}:
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <input
+                type="text"
+                placeholder="Full Name (e.g. Asad Brohi)"
+                value={quickPlayerName}
+                onChange={(e) => setQuickPlayerName(e.target.value)}
+                className="flex-1 px-3 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+              />
+              <input
+                type="text"
+                placeholder="Roll No (e.g. 24SW33)"
+                value={quickPlayerRoll}
+                onChange={(e) => setQuickPlayerRoll(e.target.value)}
+                className="w-32 px-3 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs font-mono"
+              />
+              <button
+                type="button"
+                onClick={handleQuickAddAthlete}
+                disabled={isQuickAdding || !quickPlayerName.trim()}
+                className="px-4 py-1.5 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold rounded hover:bg-white disabled:opacity-50 cursor-pointer"
+              >
+                {isQuickAdding ? 'Saving...' : 'Add & Draft'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowQuickAddPlayer(false)}
+                className="px-3 py-1.5 bg-surface-container text-fog-text text-xs rounded hover:text-white"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Squad Selection Columns (Playing Lineup & Optional Reserves) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Section 1: Playing Lineup */}
+          <div className="p-3.5 bg-surface-container-lowest rounded border border-outline-variant/30 space-y-2.5">
+            <div className="flex items-center justify-between pb-2 border-b border-outline-variant/20">
+              <div className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-win-green text-base">sports_score</span>
+                <span className="font-caps-label text-xs uppercase text-white font-bold">
+                  {squadRules.playingLabel}
+                </span>
+              </div>
+              <span
+                className={cn(
+                  'px-2 py-0.5 rounded text-[10px] font-caps-label uppercase font-black font-table-numeral',
+                  isPlayingFull ? 'bg-win-green text-navy-deep' : 'bg-gold-accent/20 text-gold-accent'
+                )}
+              >
+                {currentPlayingIds.length} / {squadRules.playingCount} Slots
+              </span>
+            </div>
+
+            <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+              {playingPlayers.map((p, idx) => (
+                <div
+                  key={p.id}
+                  className="p-2 bg-surface-container rounded border border-outline-variant/20 flex items-center justify-between gap-2 text-xs"
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="w-5 h-5 rounded-full bg-navy-mid text-gold-accent font-mono text-[10px] flex items-center justify-center font-bold">
+                      {idx + 1}
+                    </span>
+                    <span className="font-bold text-white truncate">{p.name}</span>
+                    <span className="text-[10px] text-fog-text font-mono">({p.roll_no || 'Roster'})</span>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      title="Demote to Optional Reserves"
+                      disabled={isOptionalFull}
+                      onClick={() => handleDemoteToOptional(p.id)}
+                      className="p-1 text-fog-text hover:text-gold-accent hover:bg-surface-container-high rounded disabled:opacity-30 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-sm">arrow_downward</span>
+                    </button>
+                    <button
+                      type="button"
+                      title="Remove from Squad"
+                      onClick={() => handleRemoveFromSquad(p.id)}
+                      className="p-1 text-fog-text hover:text-live-red hover:bg-surface-container-high rounded cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-sm">close</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Dotted empty slot indicators */}
+              {Array.from({ length: Math.max(0, squadRules.playingCount - currentPlayingIds.length) }).map(
+                (_, i) => (
+                  <div
+                    key={i}
+                    className="p-2 border border-dashed border-outline-variant/30 rounded text-center text-[11px] text-fog-text/60 font-caps-label uppercase"
+                  >
+                    Slot {currentPlayingIds.length + i + 1} &bull; Empty
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+
+          {/* Section 2: Optional Reserves */}
+          <div className="p-3.5 bg-surface-container-lowest rounded border border-outline-variant/30 space-y-2.5">
+            <div className="flex items-center justify-between pb-2 border-b border-outline-variant/20">
+              <div className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-gold-accent text-base">chair</span>
+                <span className="font-caps-label text-xs uppercase text-white font-bold">
+                  {squadRules.optionalLabel}
+                </span>
+              </div>
+              <span
+                className={cn(
+                  'px-2 py-0.5 rounded text-[10px] font-caps-label uppercase font-black font-table-numeral',
+                  isOptionalFull ? 'bg-gold-accent text-navy-deep' : 'bg-surface-container text-fog-text'
+                )}
+              >
+                {currentOptionalIds.length} / {squadRules.optionalCount} Reserves
+              </span>
+            </div>
+
+            <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+              {optionalPlayers.map((p, idx) => (
+                <div
+                  key={p.id}
+                  className="p-2 bg-surface-container rounded border border-outline-variant/20 flex items-center justify-between gap-2 text-xs"
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="px-1.5 py-0.5 rounded bg-surface-container-high text-gold-accent font-caps-label text-[9px] font-bold">
+                      RES {idx + 1}
+                    </span>
+                    <span className="font-bold text-white truncate">{p.name}</span>
+                    <span className="text-[10px] text-fog-text font-mono">({p.roll_no || 'Roster'})</span>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      title="Promote to Starting Lineup"
+                      disabled={isPlayingFull}
+                      onClick={() => handlePromoteToPlaying(p.id)}
+                      className="p-1 text-fog-text hover:text-win-green hover:bg-surface-container-high rounded disabled:opacity-30 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-sm">arrow_upward</span>
+                    </button>
+                    <button
+                      type="button"
+                      title="Remove from Squad"
+                      onClick={() => handleRemoveFromSquad(p.id)}
+                      className="p-1 text-fog-text hover:text-live-red hover:bg-surface-container-high rounded cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-sm">close</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Dotted empty slot indicators */}
+              {Array.from({ length: Math.max(0, squadRules.optionalCount - currentOptionalIds.length) }).map(
+                (_, i) => (
+                  <div
+                    key={i}
+                    className="p-2 border border-dashed border-outline-variant/30 rounded text-center text-[11px] text-fog-text/60 font-caps-label uppercase"
+                  >
+                    Reserve {currentOptionalIds.length + i + 1} &bull; Empty
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Section 3: Available Batch Athlete Pool */}
+        <div className="p-3 bg-surface-container rounded border border-outline-variant/20 space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="font-caps-label text-xs uppercase text-gold-accent font-bold flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm">badge</span>
+              <span>Available Batch Athletes ({unassignedAthletes.length} in pool)</span>
+            </span>
+
+            <input
+              type="text"
+              placeholder="Search athlete by name or roll number..."
+              value={playerSearchQuery}
+              onChange={(e) => setPlayerSearchQuery(e.target.value)}
+              className="px-2.5 py-1 bg-surface-container-lowest border border-outline-variant/30 rounded text-white text-xs w-full sm:w-64"
+            />
+          </div>
+
+          {filteredUnassignedAthletes.length === 0 ? (
+            <p className="text-xs text-fog-text py-2 italic">
+              {batchAthletes.length === 0
+                ? 'No registered athletes found for this batch yet. Use "Quick Register Athlete" above to add players.'
+                : 'All registered athletes in this batch have been assigned to the squad.'}
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-44 overflow-y-auto pr-1">
+              {filteredUnassignedAthletes.map((p) => (
+                <div
+                  key={p.id}
+                  className="p-2 bg-surface-container-lowest rounded border border-outline-variant/20 flex items-center justify-between gap-2"
+                >
+                  <div className="truncate">
+                    <span className="text-xs font-bold text-white block truncate">{p.name}</span>
+                    <span className="text-[10px] text-fog-text font-mono">{p.roll_no || 'No roll no'}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      disabled={isPlayingFull}
+                      onClick={() => handleAddToPlaying(p.id)}
+                      className="px-2 py-0.5 bg-win-green/20 hover:bg-win-green text-win-green hover:text-navy-deep font-caps-label text-[10px] uppercase font-bold rounded transition-colors disabled:opacity-30 cursor-pointer"
+                    >
+                      + Lineup
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isOptionalFull}
+                      onClick={() => handleAddToOptional(p.id)}
+                      className="px-2 py-0.5 bg-gold-accent/20 hover:bg-gold-accent text-gold-accent hover:text-navy-deep font-caps-label text-[10px] uppercase font-bold rounded transition-colors disabled:opacity-30 cursor-pointer"
+                    >
+                      + Reserve
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full">
       {/* ── Page Header ── */}
@@ -149,7 +686,7 @@ export default function AdminTeamsPage() {
             MANAGE BATCH TEAMS &amp; SQUADS
           </h1>
           <p className="font-body text-fog-text text-xs sm:text-sm mt-1">
-            Registered squads per sport and batch for team championships with full administrative control
+            Registered squads with sport-specific lineup requirements (11+3 for cricket, 5+3 for futsal, 7+3 for volleyball)
           </p>
         </div>
 
@@ -158,6 +695,14 @@ export default function AdminTeamsPage() {
           onClick={() => {
             setIsAdding(!isAdding);
             setEditingTeam(null);
+            setFormData({
+              name: '',
+              game_id: MOCK_GAMES[0].id,
+              batch_id: MOCK_BATCHES[2].id,
+              gender: 'boys',
+              playing_player_ids: [],
+              optional_player_ids: [],
+            });
           }}
           className="bg-gold-accent text-navy-deep font-caps-label text-xs uppercase px-4 py-2.5 font-bold hover:bg-white transition-colors cursor-pointer w-fit flex items-center gap-2"
         >
@@ -173,16 +718,17 @@ export default function AdminTeamsPage() {
         </div>
       )}
 
-      {/* ── Add Team Form ── */}
+      {/* ── Add Team Form with Squad Builder ── */}
       {isAdding && (
         <form
           onSubmit={handleAddTeam}
-          className="mb-8 p-6 bg-surface-container border border-gold-accent/40 rounded shadow-xl"
+          className="mb-8 p-6 bg-surface-container border border-gold-accent/40 rounded shadow-xl space-y-4"
         >
-          <h3 className="font-display text-gold-accent uppercase text-lg mb-4">
-            REGISTER NEW SQUAD
+          <h3 className="font-display text-gold-accent uppercase text-lg">
+            REGISTER NEW SQUAD &amp; LINEUP
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
                 Squad / Team Name
@@ -202,7 +748,14 @@ export default function AdminTeamsPage() {
               </label>
               <select
                 value={formData.game_id}
-                onChange={(e) => setFormData({ ...formData, game_id: e.target.value })}
+                onChange={(e) => {
+                  setFormData({
+                    ...formData,
+                    game_id: e.target.value,
+                    playing_player_ids: [],
+                    optional_player_ids: [],
+                  });
+                }}
                 className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
               >
                 {MOCK_GAMES.filter((g) => g.format === 'team').map((g) => (
@@ -218,7 +771,14 @@ export default function AdminTeamsPage() {
               </label>
               <select
                 value={formData.batch_id}
-                onChange={(e) => setFormData({ ...formData, batch_id: e.target.value })}
+                onChange={(e) => {
+                  setFormData({
+                    ...formData,
+                    batch_id: e.target.value,
+                    playing_player_ids: [],
+                    optional_player_ids: [],
+                  });
+                }}
                 className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
               >
                 {MOCK_BATCHES.map((b) => (
@@ -234,7 +794,14 @@ export default function AdminTeamsPage() {
               </label>
               <select
                 value={formData.gender}
-                onChange={(e) => setFormData({ ...formData, gender: e.target.value as any })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    gender: e.target.value as any,
+                    playing_player_ids: [],
+                    optional_player_ids: [],
+                  })
+                }
                 className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
               >
                 <option value="boys">Boys</option>
@@ -242,23 +809,36 @@ export default function AdminTeamsPage() {
               </select>
             </div>
           </div>
-          <button
-            type="submit"
-            className="px-6 py-2.5 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors cursor-pointer"
-          >
-            Save Squad
-          </button>
+
+          {/* Interactive Squad Builder */}
+          {renderSquadBuilder()}
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-outline-variant/20">
+            <button
+              type="button"
+              onClick={() => setIsAdding(false)}
+              className="px-4 py-2 border border-outline-variant/40 text-fog-text font-caps-label text-xs uppercase hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-6 py-2.5 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors cursor-pointer shadow-lg"
+            >
+              Save Squad &amp; Roster
+            </button>
+          </div>
         </form>
       )}
 
-      {/* ── Edit Team Modal ── */}
+      {/* ── Edit Team Modal with Squad Builder ── */}
       {editingTeam && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <form
             onSubmit={handleUpdateTeam}
-            className="w-full max-w-lg bg-surface-container border border-gold-accent p-6 rounded shadow-2xl"
+            className="w-full max-w-4xl bg-surface-container border border-gold-accent p-6 rounded shadow-2xl space-y-4 my-8 max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between pb-3 border-b border-outline-variant/30 mb-4">
+            <div className="flex items-center justify-between pb-3 border-b border-outline-variant/30">
               <h3 className="font-display text-gold-accent uppercase text-lg">
                 EDIT SQUAD: {editingTeam.name}
               </h3>
@@ -271,8 +851,8 @@ export default function AdminTeamsPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              <div className="sm:col-span-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
                 <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
                   Squad Name
                 </label>
@@ -291,7 +871,12 @@ export default function AdminTeamsPage() {
                 </label>
                 <select
                   value={editingTeam.game_id}
-                  onChange={(e) => setEditingTeam({ ...editingTeam, game_id: e.target.value })}
+                  onChange={(e) =>
+                    setEditingTeam({
+                      ...editingTeam,
+                      game_id: e.target.value,
+                    })
+                  }
                   className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
                 >
                   {MOCK_GAMES.filter((g) => g.format === 'team').map((g) => (
@@ -308,7 +893,12 @@ export default function AdminTeamsPage() {
                 </label>
                 <select
                   value={editingTeam.batch_id}
-                  onChange={(e) => setEditingTeam({ ...editingTeam, batch_id: e.target.value })}
+                  onChange={(e) =>
+                    setEditingTeam({
+                      ...editingTeam,
+                      batch_id: e.target.value,
+                    })
+                  }
                   className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
                 >
                   {MOCK_BATCHES.map((b) => (
@@ -334,6 +924,9 @@ export default function AdminTeamsPage() {
               </div>
             </div>
 
+            {/* Interactive Squad Builder for Edit */}
+            {renderSquadBuilder()}
+
             <div className="flex justify-end gap-3 pt-3 border-t border-outline-variant/20">
               <button
                 type="button"
@@ -344,29 +937,138 @@ export default function AdminTeamsPage() {
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white"
+                className="px-5 py-2 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors"
               >
-                Update Squad
+                Update Squad &amp; Lineup
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* ── Delete Confirmation with Permission Guard ── */}
+      {/* ── View Squad Roster Modal ── */}
+      {viewingSquadTeam && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-surface-container border-2 border-gold-accent rounded-lg shadow-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-outline-variant/30">
+              <div>
+                <h3 className="font-display text-white text-xl uppercase tracking-tight flex items-center gap-2">
+                  <span>{viewingSquadTeam.name}</span>
+                  <span className="px-2 py-0.5 rounded bg-gold-accent text-navy-deep text-xs font-bold font-caps-label">
+                    Batch {viewingSquadTeam.batch}
+                  </span>
+                </h3>
+                <span className="text-xs text-fog-text font-caps-label">
+                  {viewingSquadTeam.game} &bull; Category: {viewingSquadTeam.gender.toUpperCase()}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingSquadTeam(null)}
+                className="text-fog-text hover:text-white"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {/* Playing Lineup */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between pb-1 border-b border-outline-variant/20">
+                <span className="font-caps-label text-xs uppercase text-win-green font-bold flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm">sports_score</span>
+                  <span>
+                    Starting Lineup (
+                    {viewingSquadTeam.playing_players?.length || viewingSquadTeam.playing_player_ids?.length || 0})
+                  </span>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {(viewingSquadTeam.playing_players && viewingSquadTeam.playing_players.length > 0
+                  ? viewingSquadTeam.playing_players
+                  : players.filter((p) => (viewingSquadTeam.playing_player_ids || []).includes(p.id))
+                ).map((p: any, idx: number) => (
+                  <div
+                    key={p.id}
+                    className="p-2.5 bg-surface-container-lowest rounded border border-outline-variant/20 flex items-center gap-2.5"
+                  >
+                    <span className="w-6 h-6 rounded-full bg-navy-mid text-gold-accent font-bold font-mono text-xs flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <div className="truncate">
+                      <span className="text-xs font-bold text-white block truncate">{p.name}</span>
+                      <span className="text-[10px] text-fog-text font-mono">{p.roll_no || 'Batch Roster'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Optional Reserves */}
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center justify-between pb-1 border-b border-outline-variant/20">
+                <span className="font-caps-label text-xs uppercase text-gold-accent font-bold flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm">chair</span>
+                  <span>
+                    Optional / Reserves (
+                    {viewingSquadTeam.optional_players?.length || viewingSquadTeam.optional_player_ids?.length || 0})
+                  </span>
+                </span>
+              </div>
+
+              {(viewingSquadTeam.optional_players && viewingSquadTeam.optional_players.length > 0
+                ? viewingSquadTeam.optional_players
+                : players.filter((p) => (viewingSquadTeam.optional_player_ids || []).includes(p.id))
+              ).length === 0 ? (
+                <p className="text-xs text-fog-text italic py-1">No reserve players assigned.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {(viewingSquadTeam.optional_players && viewingSquadTeam.optional_players.length > 0
+                    ? viewingSquadTeam.optional_players
+                    : players.filter((p) => (viewingSquadTeam.optional_player_ids || []).includes(p.id))
+                  ).map((p: any, idx: number) => (
+                    <div
+                      key={p.id}
+                      className="p-2.5 bg-surface-container-lowest rounded border border-outline-variant/20 flex items-center gap-2.5"
+                    >
+                      <span className="px-1.5 py-0.5 rounded bg-surface-container-high text-gold-accent font-caps-label text-[10px] font-bold">
+                        RES {idx + 1}
+                      </span>
+                      <div className="truncate">
+                        <span className="text-xs font-bold text-white block truncate">{p.name}</span>
+                        <span className="text-[10px] text-fog-text font-mono">{p.roll_no || 'Batch Roster'}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-outline-variant/20">
+              <button
+                type="button"
+                onClick={() => setViewingSquadTeam(null)}
+                className="px-5 py-2 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold rounded hover:bg-white cursor-pointer"
+              >
+                Close Roster Sheet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation Guard ── */}
       {deletingTeam && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-surface-container border-2 border-live-red p-6 rounded shadow-2xl">
             <div className="flex items-center gap-3 text-live-red mb-3">
               <span className="material-symbols-outlined text-2xl">warning</span>
-              <h3 className="font-display uppercase text-lg">
-                CONFIRM SQUAD DELETION
-              </h3>
+              <h3 className="font-display uppercase text-lg">CONFIRM SQUAD DELETION</h3>
             </div>
 
             <p className="text-xs sm:text-sm text-fog-text mb-4">
               You are deleting squad <strong className="text-white">{deletingTeam.name}</strong> ({deletingTeam.batch} &bull; {deletingTeam.game}).
-              This removes the squad from scheduled fixtures and rosters.
+              This removes the squad and its roster from tournament records.
             </p>
 
             <div className="mb-5 p-3 bg-navy-mid/60 border border-outline-variant/30 rounded">
@@ -409,7 +1111,7 @@ export default function AdminTeamsPage() {
         </div>
       )}
 
-      {/* ── Teams Table ── */}
+      {/* ── Teams Table with Squad Roster Column ── */}
       <div className="overflow-x-auto bg-surface-container border border-outline-variant/20 rounded shadow">
         <table className="w-full text-left border-collapse text-xs sm:text-sm">
           <thead>
@@ -418,52 +1120,79 @@ export default function AdminTeamsPage() {
               <th className="p-3.5">SPORT</th>
               <th className="p-3.5">BATCH</th>
               <th className="p-3.5">CATEGORY</th>
+              <th className="p-3.5">SQUAD ROSTER</th>
               <th className="p-3.5 text-right">ACTIONS</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant/15">
-            {teams.map((t) => (
-              <tr key={t.id} className="hover:bg-surface-container-high transition-colors">
-                <td className="p-3.5 font-bold text-white font-caps-label">
-                  {t.name}
-                </td>
-                <td className="p-3.5 text-gold-accent font-caps-label">
-                  {t.game}
-                </td>
-                <td className="p-3.5 text-white font-display text-base">
-                  {t.batch}
-                </td>
-                <td className="p-3.5">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-caps-label uppercase bg-surface-container-high text-fog-text">
-                    {t.gender}
-                  </span>
-                </td>
-                <td className="p-3.5 text-right space-x-2 whitespace-nowrap">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingTeam(t);
-                      setIsAdding(false);
-                    }}
-                    className="px-2.5 py-1 text-xs font-caps-label uppercase bg-surface-container-highest text-gold-accent hover:bg-gold-accent hover:text-navy-deep rounded font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
-                  >
-                    <span className="material-symbols-outlined text-sm">edit</span>
-                    <span>Edit</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDeletingTeam(t);
-                      setDeleteConfirmInput('');
-                    }}
-                    className="px-2.5 py-1 text-xs font-caps-label uppercase bg-surface-container-highest text-live-red hover:bg-live-red hover:text-white rounded font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
-                  >
-                    <span className="material-symbols-outlined text-sm">delete</span>
-                    <span>Delete</span>
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {teams.map((t) => {
+              const rules = getSquadRulesForGame(t.game_slug);
+              const pCount = t.playing_player_ids?.length || t.playing_players?.length || 0;
+              const oCount = t.optional_player_ids?.length || t.optional_players?.length || 0;
+
+              return (
+                <tr key={t.id} className="hover:bg-surface-container-high transition-colors">
+                  <td className="p-3.5 font-bold text-white font-caps-label">{t.name}</td>
+                  <td className="p-3.5 text-gold-accent font-caps-label">{t.game}</td>
+                  <td className="p-3.5 text-white font-display text-base">{t.batch}</td>
+                  <td className="p-3.5">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-caps-label uppercase bg-surface-container-high text-fog-text">
+                      {t.gender}
+                    </span>
+                  </td>
+                  <td className="p-3.5">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          'px-2 py-0.5 rounded text-[10px] font-caps-label uppercase font-bold font-table-numeral',
+                          pCount >= rules.playingCount
+                            ? 'bg-win-green/20 text-win-green border border-win-green/40'
+                            : 'bg-gold-accent/15 text-gold-accent border border-gold-accent/30'
+                        )}
+                      >
+                        {pCount} Lineup + {oCount} Res ({pCount + oCount} Total)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setViewingSquadTeam(t)}
+                        className="px-2 py-0.5 bg-surface-container-highest hover:bg-gold-accent hover:text-navy-deep text-fog-text font-caps-label text-[10px] uppercase font-bold rounded transition-colors cursor-pointer inline-flex items-center gap-1"
+                      >
+                        <span className="material-symbols-outlined text-xs">visibility</span>
+                        <span>View</span>
+                      </button>
+                    </div>
+                  </td>
+                  <td className="p-3.5 text-right space-x-2 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTeam({
+                          ...t,
+                          playing_player_ids: t.playing_player_ids || t.playing_players?.map((p: any) => p.id) || [],
+                          optional_player_ids: t.optional_player_ids || t.optional_players?.map((p: any) => p.id) || [],
+                        });
+                        setIsAdding(false);
+                      }}
+                      className="px-2.5 py-1 text-xs font-caps-label uppercase bg-surface-container-highest text-gold-accent hover:bg-gold-accent hover:text-navy-deep rounded font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-sm">edit</span>
+                      <span>Edit</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeletingTeam(t);
+                        setDeleteConfirmInput('');
+                      }}
+                      className="px-2.5 py-1 text-xs font-caps-label uppercase bg-surface-container-highest text-live-red hover:bg-live-red hover:text-white rounded font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-sm">delete</span>
+                      <span>Delete</span>
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

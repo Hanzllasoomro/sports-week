@@ -33,15 +33,39 @@ export function CricketScorerRoom({
   const batchBCode = fixture.team_b?.batch?.code || '23AI';
 
   // Helper to get squad for a batch code
-  function getSquadForBatch(batchCode: string, teamBatchId?: string): string[] {
+  function getSquadForBatch(batchCode: string, team?: any): string[] {
+    // 1. If team has explicit playing and optional players configured via squad builder
+    if (team?.playing_players && team.playing_players.length > 0) {
+      const playingNames = team.playing_players.map((p: any) => p.name?.trim()).filter(Boolean);
+      const optionalNames = (team.optional_players || []).map((p: any) => p.name?.trim()).filter(Boolean);
+      return Array.from(new Set([...playingNames, ...optionalNames]));
+    }
+
+    const teamBatchId = team?.batch_id;
     const fromProps = players
-      .filter((p) => (teamBatchId && p.batch_id === teamBatchId) || p.batch?.code?.toUpperCase() === batchCode.toUpperCase())
-      .map((p) => p.name);
+      .filter(
+        (p) =>
+          (teamBatchId && p.batch_id === teamBatchId) ||
+          p.batch?.code?.toUpperCase() === batchCode.toUpperCase()
+      )
+      .map((p) => p.name?.trim())
+      .filter(Boolean) as string[];
 
-    if (fromProps.length >= 6) return fromProps;
+    const uniqueFromProps = Array.from(new Set(fromProps));
+    if (uniqueFromProps.length >= 2) {
+      const list = [...uniqueFromProps];
+      if (list.length < 11) {
+        for (let i = list.length + 1; i <= 11; i++) {
+          list.push(`${batchCode} Player ${i}`);
+        }
+      }
+      return list;
+    }
 
-    const fromMock = (MOCK_PLAYERS_SAMPLE[batchCode.toUpperCase()] || []).map((p) => p.name);
-    const combined = Array.from(new Set([...fromProps, ...fromMock]));
+    const fromMock = (MOCK_PLAYERS_SAMPLE[batchCode.toUpperCase()] || [])
+      .map((p) => p.name?.trim())
+      .filter(Boolean) as string[];
+    const combined = Array.from(new Set([...uniqueFromProps, ...fromMock]));
 
     if (combined.length < 11) {
       for (let i = combined.length + 1; i <= 11; i++) {
@@ -51,25 +75,38 @@ export function CricketScorerRoom({
     return combined;
   }
 
-  const teamASquad = getSquadForBatch(batchACode, fixture.team_a?.batch_id);
-  const teamBSquad = getSquadForBatch(batchBCode, fixture.team_b?.batch_id);
+  const teamASquad = getSquadForBatch(batchACode, fixture.team_a);
+  const teamBSquad = getSquadForBatch(batchBCode, fixture.team_b);
 
-  // Load existing details or provide sensible fresh defaults with 0 runs
-  const initialDetails: CricketMatchDetails = fixture.cricket_details || {
-    innings: 1,
-    batting_team_id: teamAId,
-    overs_limit: 6,
-    target: null,
-    team_a_cricket: { runs: 0, wickets: 0, overs: '0.0' },
-    team_b_cricket: { runs: 0, wickets: 0, overs: '0.0' },
-    current_batsmen: [
-      { name: teamASquad[0] || 'Batter 1', runs: 0, balls: 0, fours: 0, sixes: 0, is_on_strike: true },
-      { name: teamASquad[1] || 'Batter 2', runs: 0, balls: 0, fours: 0, sixes: 0, is_on_strike: false },
-    ],
-    current_bowler: { name: teamBSquad[0] || 'Bowler 1', overs: '0.0', maidens: 0, runs_conceded: 0, wickets: 0 },
-    recent_balls: [],
-    toss_note: `${teamAName} won the toss & elected to bat`,
-  };
+  // Helper to create sensible fresh defaults with 0 runs
+  function getInitialDetails(f: FixtureWithRelations, sA: string[], sB: string[]): CricketMatchDetails {
+    if (f.cricket_details) {
+      return f.cricket_details;
+    }
+    return {
+      innings: 1,
+      batting_team_id: teamAId,
+      overs_limit: 6,
+      target: null,
+      team_a_cricket: { runs: f.score_a ?? 0, wickets: 0, overs: '0.0' },
+      team_b_cricket: { runs: f.score_b ?? 0, wickets: 0, overs: '0.0' },
+      current_batsmen: [
+        { name: sA[0] || `${batchACode} Batter 1`, runs: 0, balls: 0, fours: 0, sixes: 0, is_on_strike: true },
+        { name: sA[1] || `${batchACode} Batter 2`, runs: 0, balls: 0, fours: 0, sixes: 0, is_on_strike: false },
+      ],
+      current_bowler: {
+        name: sB[0] || `${batchBCode} Bowler 1`,
+        overs: '0.0',
+        maidens: 0,
+        runs_conceded: 0,
+        wickets: 0,
+      },
+      recent_balls: [],
+      toss_note: `${teamAName} won the toss & elected to bat`,
+    };
+  }
+
+  const initialDetails = getInitialDetails(fixture, teamASquad, teamBSquad);
 
   const [innings, setInnings] = useState<1 | 2>(initialDetails.innings || 1);
   const [battingTeamId, setBattingTeamId] = useState<string>(initialDetails.batting_team_id || teamAId);
@@ -91,15 +128,15 @@ export function CricketScorerRoom({
     initialDetails.current_batsmen && initialDetails.current_batsmen.length >= 2
       ? initialDetails.current_batsmen
       : [
-          { name: teamASquad[0] || 'Batter 1', runs: 0, balls: 0, fours: 0, sixes: 0, is_on_strike: true },
-          { name: teamASquad[1] || 'Batter 2', runs: 0, balls: 0, fours: 0, sixes: 0, is_on_strike: false },
+          { name: teamASquad[0] || `${batchACode} Batter 1`, runs: 0, balls: 0, fours: 0, sixes: 0, is_on_strike: true },
+          { name: teamASquad[1] || `${batchACode} Batter 2`, runs: 0, balls: 0, fours: 0, sixes: 0, is_on_strike: false },
         ]
   );
 
   // Active Bowler
   const [bowler, setBowler] = useState<CricketBowler>(
     initialDetails.current_bowler || {
-      name: teamBSquad[0] || 'Bowler 1',
+      name: teamBSquad[0] || `${batchBCode} Bowler 1`,
       overs: '0.0',
       maidens: 0,
       runs_conceded: 0,
@@ -129,6 +166,89 @@ export function CricketScorerRoom({
 
   // Undo history stack
   const historyRef = useRef<any[]>([]);
+
+  // Synchronize state on fixture or players change
+  const currentFixtureIdRef = useRef<string>(fixture.id);
+
+  useEffect(() => {
+    const isNewFixture = currentFixtureIdRef.current !== fixture.id;
+    currentFixtureIdRef.current = fixture.id;
+
+    if (fixture.cricket_details) {
+      const d = fixture.cricket_details;
+      setInnings(d.innings || 1);
+      setBattingTeamId(d.batting_team_id || teamAId);
+      setOversLimit(d.overs_limit || 6);
+      setTarget(d.target ?? '');
+      setRunsA(d.team_a_cricket?.runs ?? fixture.score_a ?? 0);
+      setWicketsA(d.team_a_cricket?.wickets ?? 0);
+      setOversA(d.team_a_cricket?.overs ?? '0.0');
+      setRunsB(d.team_b_cricket?.runs ?? fixture.score_b ?? 0);
+      setWicketsB(d.team_b_cricket?.wickets ?? 0);
+      setOversB(d.team_b_cricket?.overs ?? '0.0');
+      if (d.current_batsmen && d.current_batsmen.length >= 2) {
+        setBatsmen(d.current_batsmen);
+      }
+      if (d.current_bowler) {
+        setBowler(d.current_bowler);
+      }
+      setBatsmenCard(d.batsmen_card || []);
+      setBowlersCard(d.bowlers_card || []);
+      setRecentBalls(d.recent_balls || []);
+      setTossNote(d.toss_note || `${teamAName} won the toss & elected to bat`);
+      setStatusNote(d.status_note || '');
+      setStatus(fixture.status === 'completed' ? 'completed' : 'live');
+    } else if (isNewFixture) {
+      // Clean initialization for a fresh fixture
+      setInnings(1);
+      setBattingTeamId(teamAId);
+      setOversLimit(6);
+      setTarget('');
+      setRunsA(fixture.score_a ?? 0);
+      setWicketsA(0);
+      setOversA('0.0');
+      setRunsB(fixture.score_b ?? 0);
+      setWicketsB(0);
+      setOversB('0.0');
+      setBatsmen([
+        { name: teamASquad[0] || `${batchACode} Batter 1`, runs: 0, balls: 0, fours: 0, sixes: 0, is_on_strike: true },
+        { name: teamASquad[1] || `${batchACode} Batter 2`, runs: 0, balls: 0, fours: 0, sixes: 0, is_on_strike: false },
+      ]);
+      setBowler({
+        name: teamBSquad[0] || `${batchBCode} Bowler 1`,
+        overs: '0.0',
+        maidens: 0,
+        runs_conceded: 0,
+        wickets: 0,
+      });
+      setBatsmenCard([]);
+      setBowlersCard([]);
+      setRecentBalls([]);
+      setTossNote(`${teamAName} won the toss & elected to bat`);
+      setStatusNote('');
+      setStatus(fixture.status === 'completed' ? 'completed' : 'live');
+    } else if (players.length > 0) {
+      // If players arrived after initial mount on an uninitialized match with 0 runs
+      setBatsmen((prev) => {
+        if (prev.every((b) => b.runs === 0 && b.balls === 0)) {
+          return [
+            { name: teamASquad[0] || prev[0]?.name || `${batchACode} Batter 1`, runs: 0, balls: 0, fours: 0, sixes: 0, is_on_strike: true },
+            { name: teamASquad[1] || prev[1]?.name || `${batchACode} Batter 2`, runs: 0, balls: 0, fours: 0, sixes: 0, is_on_strike: false },
+          ];
+        }
+        return prev;
+      });
+      setBowler((prev) => {
+        if (prev.runs_conceded === 0 && prev.wickets === 0 && prev.overs === '0.0') {
+          return {
+            ...prev,
+            name: teamBSquad[0] || prev.name || `${batchBCode} Bowler 1`,
+          };
+        }
+        return prev;
+      });
+    }
+  }, [fixture.id, fixture.cricket_details, players]);
 
   const isBattingA = battingTeamId === teamAId;
   const currentBattingSquad = isBattingA ? teamASquad : teamBSquad;
@@ -553,6 +673,69 @@ export function CricketScorerRoom({
     if (autoBroadcast) triggerBroadcast({ bowler: newBowler });
   }
 
+  // Switch active batting team (e.g. 1st innings to 2nd innings)
+  function handleSwitchBattingTeam(newTeamId: string) {
+    if (newTeamId === battingTeamId) return;
+    saveSnapshot();
+
+    const newIsBattingA = newTeamId === teamAId;
+    const newBattingSquad = newIsBattingA ? teamASquad : teamBSquad;
+    const newBowlingSquad = newIsBattingA ? teamBSquad : teamASquad;
+
+    // Set active batsmen for the newly chosen batting team
+    const newBatsmen: CricketBatsman[] = [
+      {
+        name: newBattingSquad[0] || `${newIsBattingA ? batchACode : batchBCode} Batter 1`,
+        runs: 0,
+        balls: 0,
+        fours: 0,
+        sixes: 0,
+        is_on_strike: true,
+      },
+      {
+        name: newBattingSquad[1] || `${newIsBattingA ? batchACode : batchBCode} Batter 2`,
+        runs: 0,
+        balls: 0,
+        fours: 0,
+        sixes: 0,
+        is_on_strike: false,
+      },
+    ];
+
+    // Set active bowler from fielding team
+    const newBowler: CricketBowler = {
+      name: newBowlingSquad[0] || `${newIsBattingA ? batchBCode : batchACode} Bowler 1`,
+      overs: '0.0',
+      maidens: 0,
+      runs_conceded: 0,
+      wickets: 0,
+    };
+
+    setBattingTeamId(newTeamId);
+    setBatsmen(newBatsmen);
+    setBowler(newBowler);
+
+    // Auto calculate target if Team A batted and Team B is now chasing
+    let updatedTarget = target;
+    if (!newIsBattingA && runsA > 0 && !target) {
+      updatedTarget = runsA + 1;
+      setTarget(updatedTarget);
+      setInnings(2);
+    } else if (newIsBattingA) {
+      setInnings(1);
+    }
+
+    if (autoBroadcast) {
+      triggerBroadcast({
+        battingTeamId: newTeamId,
+        batsmen: newBatsmen,
+        bowler: newBowler,
+        target: updatedTarget,
+        innings: !newIsBattingA && runsA > 0 ? 2 : 1,
+      });
+    }
+  }
+
   // Manual Save Form Submit
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -634,10 +817,7 @@ export function CricketScorerRoom({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Team A Card */}
         <div
-          onClick={() => {
-            setBattingTeamId(teamAId);
-            if (autoBroadcast) triggerBroadcast({ battingTeamId: teamAId });
-          }}
+          onClick={() => handleSwitchBattingTeam(teamAId)}
           className={cn(
             'p-4 rounded border-2 transition-all cursor-pointer flex flex-col justify-between shadow-md',
             isBattingA
@@ -675,10 +855,7 @@ export function CricketScorerRoom({
 
         {/* Team B Card */}
         <div
-          onClick={() => {
-            setBattingTeamId(teamBId);
-            if (autoBroadcast) triggerBroadcast({ battingTeamId: teamBId });
-          }}
+          onClick={() => handleSwitchBattingTeam(teamBId)}
           className={cn(
             'p-4 rounded border-2 transition-all cursor-pointer flex flex-col justify-between shadow-md',
             !isBattingA
@@ -787,14 +964,14 @@ export function CricketScorerRoom({
                   onChange={(e) => handleSelectBatsman(0, e.target.value)}
                   className="w-full px-2.5 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-bold focus:border-gold-accent focus:outline-none"
                 >
-                  <option value={batsmen[0]?.name}>{batsmen[0]?.name} (Current)</option>
-                  {currentBattingSquad
-                    .filter((p) => p !== batsmen[1]?.name)
-                    .map((p) => (
-                      <option key={p} value={p}>
-                        {p} (Score 0)
-                      </option>
-                    ))}
+                  {currentBattingSquad.map((p) => (
+                    <option key={p} value={p} disabled={p === batsmen[1]?.name}>
+                      {p} {p === batsmen[0]?.name ? '★ (Current)' : p === batsmen[1]?.name ? '(Other Crease)' : '(Score 0)'}
+                    </option>
+                  ))}
+                  {!currentBattingSquad.includes(batsmen[0]?.name) && batsmen[0]?.name && (
+                    <option value={batsmen[0]?.name}>{batsmen[0]?.name} ★ (Current)</option>
+                  )}
                 </select>
               </div>
 
@@ -871,14 +1048,14 @@ export function CricketScorerRoom({
                   onChange={(e) => handleSelectBatsman(1, e.target.value)}
                   className="w-full px-2.5 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-bold focus:border-gold-accent focus:outline-none"
                 >
-                  <option value={batsmen[1]?.name}>{batsmen[1]?.name} (Current)</option>
-                  {currentBattingSquad
-                    .filter((p) => p !== batsmen[0]?.name)
-                    .map((p) => (
-                      <option key={p} value={p}>
-                        {p} (Score 0)
-                      </option>
-                    ))}
+                  {currentBattingSquad.map((p) => (
+                    <option key={p} value={p} disabled={p === batsmen[0]?.name}>
+                      {p} {p === batsmen[1]?.name ? '★ (Current)' : p === batsmen[0]?.name ? '(Other Crease)' : '(Score 0)'}
+                    </option>
+                  ))}
+                  {!currentBattingSquad.includes(batsmen[1]?.name) && batsmen[1]?.name && (
+                    <option value={batsmen[1]?.name}>{batsmen[1]?.name} ★ (Current)</option>
+                  )}
                 </select>
               </div>
 
@@ -920,12 +1097,14 @@ export function CricketScorerRoom({
               onChange={(e) => handleSelectBowler(e.target.value)}
               className="px-3 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-bold focus:border-gold-accent focus:outline-none min-w-[180px]"
             >
-              <option value={bowler.name}>{bowler.name} (Current Bowler)</option>
               {currentBowlingSquad.map((p) => (
                 <option key={p} value={p}>
-                  {p}
+                  {p} {p === bowler.name ? '★ (Active Bowler)' : ''}
                 </option>
               ))}
+              {!currentBowlingSquad.includes(bowler.name) && bowler.name && (
+                <option value={bowler.name}>{bowler.name} ★ (Active Bowler)</option>
+              )}
             </select>
 
             <span className="text-xs text-fog-text font-table-numeral">
@@ -939,21 +1118,25 @@ export function CricketScorerRoom({
           <span className="text-[10px] text-fog-text font-caps-label uppercase shrink-0">
             Quick Bowler:
           </span>
-          {currentBowlingSquad.slice(0, 4).map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => handleSelectBowler(p)}
-              className={cn(
-                'px-2 py-1 rounded text-[11px] font-caps-label font-bold transition-all shrink-0 cursor-pointer',
-                bowler.name === p
-                  ? 'bg-gold-accent text-navy-deep shadow'
-                  : 'bg-surface-container text-fog-text hover:text-white'
-              )}
-            >
-              {p.split(' ')[0]}
-            </button>
-          ))}
+          {currentBowlingSquad.slice(0, 5).map((p) => {
+            const parts = p.split(' ');
+            const shortName = parts.length > 1 ? `${parts[0]} ${parts[1][0]}.` : parts[0];
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => handleSelectBowler(p)}
+                className={cn(
+                  'px-2 py-1 rounded text-[11px] font-caps-label font-bold transition-all shrink-0 cursor-pointer',
+                  bowler.name === p
+                    ? 'bg-gold-accent text-navy-deep shadow'
+                    : 'bg-surface-container text-fog-text hover:text-white'
+                )}
+              >
+                {shortName}
+              </button>
+            );
+          })}
         </div>
       </div>
 

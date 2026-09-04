@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { recomputeStanding } from '@/lib/points';
 import { ScoreEntrySchema, IndividualResultSchema } from '@/lib/validation/schemas';
 import type { ActionResult, Fixture, IndividualResult } from '@/types';
+import { persistCricketDetails } from '@/lib/data/cricket-store';
 
 /**
  * Save a score update / result for a team fixture.
@@ -120,6 +121,11 @@ export async function saveResult(raw: unknown): Promise<ActionResult<Fixture>> {
 
       if (updateErr) throw updateErr;
       data = updated;
+
+      // Always persist into multi-tier cricket store (direct DB, JSONB fallback, and cache)
+      if (cricket_details) {
+        await persistCricketDetails(fixture_id, cricket_details);
+      }
     } else {
       return {
         error: {

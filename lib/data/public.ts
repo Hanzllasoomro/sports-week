@@ -65,7 +65,16 @@ export async function getFixtures(day?: 1 | 2 | 3, status?: string): Promise<Fix
 
     const { data, error } = await query;
     if (!error && data) {
-      return data as FixtureWithRelations[];
+      const { retrieveCricketDetails } = await import('@/lib/data/cricket-store');
+      const enriched = await Promise.all(
+        data.map(async (item: any) => {
+          if (item.game?.slug === 'cricket' && !item.cricket_details) {
+            item.cricket_details = await retrieveCricketDetails(item.id);
+          }
+          return item;
+        })
+      );
+      return enriched as FixtureWithRelations[];
     }
   } catch {
     // Fall back to mock
@@ -171,10 +180,11 @@ export async function getTeams(): Promise<any[]> {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('teams')
-      .select('*, batch:batches(*), game:games(*)')
+      .select('*, batch:batches(*), game:games(*), team_members(*, player:players(*, batch:batches(*)))')
       .order('name');
     if (!error && data) {
-      return data;
+      const { enrichTeamsWithSquads } = await import('@/lib/data/team-squad-store');
+      return await enrichTeamsWithSquads(data);
     }
   } catch {
     // ignore

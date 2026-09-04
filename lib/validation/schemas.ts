@@ -61,10 +61,12 @@ export const PlayerCreateSchema = z.object({
 });
 
 export const TeamCreateSchema = z.object({
-  game_id:  z.string().uuid(),
-  batch_id: z.string().uuid(),
+  game_id:  z.string(),
+  batch_id: z.string(),
   gender:   z.enum(['boys', 'girls']),
   name:     z.string().min(2).max(100),
+  playing_player_ids: z.array(z.string()).optional(),
+  optional_player_ids: z.array(z.string()).optional(),
 });
 
 export type PlayerCreateInput = z.infer<typeof PlayerCreateSchema>;
