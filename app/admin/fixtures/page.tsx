@@ -70,17 +70,36 @@ export default function AdminFixturesPage() {
   const [matchTime, setMatchTime] = useState<string>('10:00');
 
   const [batchAId, setBatchAId] = useState<string>(MOCK_BATCHES[2].id);
-  const [teamAName, setTeamAName] = useState<string>('24SW Strikers');
+  const [teamAId, setTeamAId] = useState<string>('');
+  const [teamAName, setTeamAName] = useState<string>('');
   const [batchBId, setBatchBId] = useState<string>(MOCK_BATCHES[5].id);
-  const [teamBName, setTeamBName] = useState<string>('23AI Titans');
+  const [teamBId, setTeamBId] = useState<string>('');
+  const [teamBName, setTeamBName] = useState<string>('');
 
+  const [playerAId, setPlayerAId] = useState<string>('');
   const [playerAName, setPlayerAName] = useState<string>('');
   const [playerARollNo, setPlayerARollNo] = useState<string>('');
+  const [playerBId, setPlayerBId] = useState<string>('');
   const [playerBName, setPlayerBName] = useState<string>('');
   const [playerBRollNo, setPlayerBRollNo] = useState<string>('');
+  const [singleMatchFormat, setSingleMatchFormat] = useState<'team' | 'individual'>('team');
 
   const selectedGame = games.find((g) => g.id === gameId) || games[0];
-  const isTeamSport = selectedGame.format === 'team';
+  const isRacketSport = selectedGame.slug === 'badminton' || selectedGame.slug === 'table-tennis';
+  const isTeamSport = isRacketSport ? singleMatchFormat === 'team' : selectedGame.format === 'team';
+
+  // Global Escape key listener to close modals
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setIsAutoGenerating(false);
+        setSlotAssignFixture(null);
+        setEditingFixture(null);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Load real fixtures, teams, and players on mount
   useEffect(() => {
@@ -103,6 +122,18 @@ export default function AdminFixturesPage() {
           const playData = await playRes.json();
           if (Array.isArray(playData)) {
             setRegisteredPlayers(playData);
+            const defaultPlayA = playData.find((p) => p.batch_id === batchAId);
+            if (defaultPlayA) {
+              setPlayerAId(defaultPlayA.id);
+              setPlayerAName(defaultPlayA.name);
+              setPlayerARollNo(defaultPlayA.roll_no || '');
+            }
+            const defaultPlayB = playData.find((p) => p.batch_id === batchBId);
+            if (defaultPlayB) {
+              setPlayerBId(defaultPlayB.id);
+              setPlayerBName(defaultPlayB.name);
+              setPlayerBRollNo(defaultPlayB.roll_no || '');
+            }
           }
         }
 
@@ -110,6 +141,16 @@ export default function AdminFixturesPage() {
           const teamData = await teamRes.json();
           if (Array.isArray(teamData)) {
             setRegisteredTeams(teamData);
+            const defaultTeamA = teamData.find((t) => t.batch_id === batchAId);
+            if (defaultTeamA) {
+              setTeamAId(defaultTeamA.id);
+              setTeamAName(defaultTeamA.name);
+            }
+            const defaultTeamB = teamData.find((t) => t.batch_id === batchBId);
+            if (defaultTeamB) {
+              setTeamBId(defaultTeamB.id);
+              setTeamBName(defaultTeamB.name);
+            }
           }
         }
       } catch (err) {
@@ -253,14 +294,18 @@ export default function AdminFixturesPage() {
     };
 
     if (isTeamSport) {
+      payload.team_a_id = teamAId || undefined;
       payload.team_a_name = teamAName;
       payload.team_a_batch_id = batchAId;
+      payload.team_b_id = teamBId || undefined;
       payload.team_b_name = teamBName;
       payload.team_b_batch_id = batchBId;
     } else {
+      payload.player_a_id = playerAId || undefined;
       payload.player_a_name = playerAName || 'Athlete A';
       payload.player_a_roll_no = playerARollNo;
       payload.player_a_batch_id = batchAId;
+      payload.player_b_id = playerBId || undefined;
       payload.player_b_name = playerBName || 'Athlete B';
       payload.player_b_roll_no = playerBRollNo;
       payload.player_b_batch_id = batchBId;
@@ -408,337 +453,349 @@ export default function AdminFixturesPage() {
 
       {/* ── AUTO-SCHEDULE GENERATOR MODAL ── */}
       {isAutoGenerating && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsAutoGenerating(false);
+          }}
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6"
+        >
           <form
             onSubmit={handleAutoGenerateSlots}
-            className="w-full max-w-2xl bg-surface-container border border-gold-accent p-6 rounded shadow-2xl"
+            className="w-full max-w-2xl max-h-[90vh] flex flex-col bg-surface-container border border-gold-accent p-5 sm:p-6 rounded shadow-2xl overflow-hidden"
           >
-            <div className="flex items-center justify-between pb-3 border-b border-outline-variant/30 mb-5">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-outline-variant/30 mb-4 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-gold-accent text-2xl">auto_awesome</span>
-                <h3 className="font-display text-gold-accent uppercase text-lg">
+                <h3 className="font-display text-gold-accent uppercase text-base sm:text-lg">
                   AUTOMATIC TOURNAMENT BRACKET GENERATOR
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsAutoGenerating(false)}
-                className="text-fog-text hover:text-white"
+                className="px-2.5 py-1 bg-surface-container-lowest border border-outline-variant/40 rounded text-fog-text hover:text-white hover:border-gold-accent/50 flex items-center gap-1 transition-colors cursor-pointer"
+                title="Close modal (Esc)"
               >
-                <span className="material-symbols-outlined">close</span>
+                <span className="material-symbols-outlined text-base">close</span>
+                <span className="text-[11px] font-caps-label uppercase font-bold">Close</span>
               </button>
             </div>
 
-            <p className="text-xs text-fog-text mb-5 font-body leading-relaxed">
-              Generate tournament fixture slot placeholders automatically based on your desired bracket size. Supports standard knockout elimination with <strong>automatic Byes</strong> for <strong>20 to 25 teams</strong> (Badminton, Table Tennis, and all championship sports). All Championship Finals are strictly locked to September 10, 2026.
-            </p>
+            {/* Scrollable Modal Content */}
+            <div className="flex-1 overflow-y-auto pr-1 space-y-5">
+              <p className="text-xs text-fog-text font-body leading-relaxed">
+                Generate tournament fixture slot placeholders automatically based on your desired bracket size. Supports standard knockout elimination with <strong>automatic Byes</strong> for <strong>20 to 25 teams</strong> (Badminton, Table Tennis, and all championship sports). All Championship Finals are strictly locked to September 10, 2026.
+              </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-              {/* Sport Picker */}
-              <div>
-                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
-                  Target Sport
-                </label>
-                <select
-                  value={autoGameId}
-                  onChange={(e) => {
-                    setAutoGameId(e.target.value);
-                    const sel = games.find((g) => g.id === e.target.value);
-                    if (sel) {
-                      setAutoMatchFormat(sel.format === 'team' ? 'team' : 'individual');
-                    }
-                  }}
-                  className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-bold text-gold-accent"
-                >
-                  <option value="all">🌟 All 10 Championship Sports</option>
-                  {games.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name} ({g.format})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Match Format (Singles vs Pair-Up) */}
-              <div>
-                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
-                  Match Format Mode
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setAutoMatchFormat('individual')}
-                    className={`px-3 py-2 rounded text-xs font-caps-label uppercase font-bold border transition-colors ${
-                      autoMatchFormat === 'individual'
-                        ? 'bg-primary/30 border-primary text-white'
-                        : 'bg-surface-container-lowest border-outline-variant/30 text-fog-text hover:text-white'
-                    }`}
-                  >
-                    👤 Singles (1v1)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAutoMatchFormat('team')}
-                    className={`px-3 py-2 rounded text-xs font-caps-label uppercase font-bold border transition-colors ${
-                      autoMatchFormat === 'team'
-                        ? 'bg-gold-accent/30 border-gold-accent text-gold-accent'
-                        : 'bg-surface-container-lowest border-outline-variant/30 text-fog-text hover:text-white'
-                    }`}
-                  >
-                    👥 Doubles / Pairs (2v2)
-                  </button>
-                </div>
-              </div>
-
-              {/* Bracket Size with Presets */}
-              <div className="sm:col-span-2">
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-caps-label text-fog-text uppercase font-bold">
-                    Number of Competitors / Teams (4 to 32)
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Sport Picker */}
+                <div>
+                  <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
+                    Target Sport
                   </label>
-                  <span className="text-xs font-table-numeral text-gold-accent font-bold">
-                    {autoTeamCount} Competitors Selected
-                  </span>
+                  <select
+                    value={autoGameId}
+                    onChange={(e) => {
+                      setAutoGameId(e.target.value);
+                      const sel = games.find((g) => g.id === e.target.value);
+                      if (sel) {
+                        setAutoMatchFormat(sel.format === 'team' ? 'team' : 'individual');
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-bold text-gold-accent"
+                  >
+                    <option value="all">🌟 All 10 Championship Sports</option>
+                    {games.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name} ({g.format})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                {/* Quick Presets */}
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {[
-                    { label: '4 Teams', count: 4 },
-                    { label: '8 Teams', count: 8 },
-                    { label: '9 Batches', count: 9 },
-                    { label: '16 Teams', count: 16 },
-                    { label: '20 Teams (12 Byes)', count: 20 },
-                    { label: '22 Teams (10 Byes)', count: 22 },
-                    { label: '24 Teams (8 Byes)', count: 24 },
-                    { label: '25 Teams (7 Byes)', count: 25 },
-                    { label: '32 Teams', count: 32 },
-                  ].map((p) => (
+                {/* Match Format (Singles vs Pair-Up) */}
+                <div>
+                  <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
+                    Match Format Mode
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
                     <button
-                      key={p.count}
                       type="button"
-                      onClick={() => setAutoTeamCount(p.count)}
-                      className={`px-2.5 py-1 rounded text-[11px] font-caps-label uppercase transition-all ${
-                        autoTeamCount === p.count
-                          ? 'bg-gold-accent text-navy-deep font-bold shadow'
-                          : 'bg-surface-container-lowest border border-outline-variant/30 text-fog-text hover:text-white hover:border-gold-accent/40'
+                      onClick={() => setAutoMatchFormat('individual')}
+                      className={`px-3 py-2 rounded text-xs font-caps-label uppercase font-bold border transition-colors ${
+                        autoMatchFormat === 'individual'
+                          ? 'bg-primary/30 border-primary text-white'
+                          : 'bg-surface-container-lowest border-outline-variant/30 text-fog-text hover:text-white'
                       }`}
                     >
-                      {p.label}
+                      👤 Singles (1v1)
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => setAutoMatchFormat('team')}
+                      className={`px-3 py-2 rounded text-xs font-caps-label uppercase font-bold border transition-colors ${
+                        autoMatchFormat === 'team'
+                          ? 'bg-gold-accent/30 border-gold-accent text-gold-accent'
+                          : 'bg-surface-container-lowest border-outline-variant/30 text-fog-text hover:text-white'
+                      }`}
+                    >
+                      👥 Doubles / Pairs (2v2)
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={4}
-                    max={32}
-                    value={autoTeamCount}
-                    onChange={(e) => setAutoTeamCount(Number(e.target.value))}
-                    className="flex-1 accent-gold-accent cursor-pointer"
-                  />
-                  <input
-                    type="number"
-                    min={4}
-                    max={32}
-                    value={autoTeamCount}
-                    onChange={(e) => setAutoTeamCount(Math.max(4, Math.min(32, Number(e.target.value) || 4)))}
-                    className="w-16 px-2 py-1 bg-surface-container-lowest border border-outline-variant/40 rounded text-center text-white text-xs font-bold font-table-numeral"
-                  />
-                </div>
-              </div>
-
-              {/* Category */}
-              <div>
-                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
-                  Gender Category
-                </label>
-                <select
-                  value={autoGender}
-                  onChange={(e) => setAutoGender(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
-                >
-                  <option value="boys">Boys Division</option>
-                  <option value="girls">Girls Division</option>
-                </select>
-              </div>
-
-              {/* Venue */}
-              <div>
-                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
-                  Primary Arena / Venue
-                </label>
-                <input
-                  type="text"
-                  value={autoVenue}
-                  onChange={(e) => setAutoVenue(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
-                />
-              </div>
-            </div>
-
-            {/* ── Interactive Bracket Structure Summary Card ── */}
-            {(() => {
-              const N = autoTeamCount;
-              const byes = N > 16 ? 32 - N : N > 8 ? 16 - N : 0;
-              const r32Matches = N > 16 ? N - 16 : 0;
-              const r16Matches = N > 16 ? 8 : N > 8 ? N - 8 : 0;
-              const totalMatches = N - 1;
-
-              return (
-                <div className="p-4 bg-surface-container-lowest border border-gold-accent/30 rounded mb-5 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-caps-label text-xs uppercase text-gold-accent font-bold flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-sm">account_tree</span>
-                      <span>Tournament Bracket Breakdown ({N} Teams)</span>
-                    </span>
-                    <span className="px-2 py-0.5 bg-gold-accent/20 border border-gold-accent/40 rounded text-[10px] font-caps-label text-gold-accent font-bold uppercase">
-                      {totalMatches} Total Matches
+                {/* Bracket Size with Presets */}
+                <div className="sm:col-span-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-caps-label text-fog-text uppercase font-bold">
+                      Number of Competitors / Teams (4 to 32)
+                    </label>
+                    <span className="text-xs font-table-numeral text-gold-accent font-bold">
+                      {autoTeamCount} Competitors Selected
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs pt-1">
-                    {N > 16 ? (
-                      <>
-                        <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
-                          <div className="text-[10px] text-fog-text uppercase font-caps-label">Direct Byes to R16</div>
-                          <div className="font-display text-win-green text-sm font-bold">{byes} Teams</div>
-                        </div>
-                        <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
-                          <div className="text-[10px] text-fog-text uppercase font-caps-label">Round of 32</div>
-                          <div className="font-display text-white text-sm font-bold">{r32Matches} Matches</div>
-                        </div>
-                        <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
-                          <div className="text-[10px] text-fog-text uppercase font-caps-label">Round of 16</div>
-                          <div className="font-display text-white text-sm font-bold">8 Matches</div>
-                        </div>
-                        <div className="p-2 bg-surface-container rounded border border-gold-accent/30">
-                          <div className="text-[10px] text-gold-accent uppercase font-caps-label">Quarters &rarr; Final</div>
-                          <div className="font-display text-gold-accent text-sm font-bold">7 Matches (4+2+1)</div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
-                          <div className="text-[10px] text-fog-text uppercase font-caps-label">Bracket Size</div>
-                          <div className="font-display text-white text-sm font-bold">{N <= 4 ? 4 : N <= 8 ? 8 : 16}</div>
-                        </div>
-                        <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
-                          <div className="text-[10px] text-fog-text uppercase font-caps-label">Byes</div>
-                          <div className="font-display text-win-green text-sm font-bold">{byes} Teams</div>
-                        </div>
-                        <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
-                          <div className="text-[10px] text-fog-text uppercase font-caps-label">Early Rounds</div>
-                          <div className="font-display text-white text-sm font-bold">{totalMatches - 3} Matches</div>
-                        </div>
-                        <div className="p-2 bg-surface-container rounded border border-gold-accent/30">
-                          <div className="text-[10px] text-gold-accent uppercase font-caps-label">Semis &amp; Final</div>
-                          <div className="font-display text-gold-accent text-sm font-bold">3 Matches (2+1)</div>
-                        </div>
-                      </>
-                    )}
+                  {/* Quick Presets */}
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {[
+                      { label: '4 Teams', count: 4 },
+                      { label: '8 Teams', count: 8 },
+                      { label: '9 Batches', count: 9 },
+                      { label: '16 Teams', count: 16 },
+                      { label: '20 Teams (12 Byes)', count: 20 },
+                      { label: '22 Teams (10 Byes)', count: 22 },
+                      { label: '24 Teams (8 Byes)', count: 24 },
+                      { label: '25 Teams (7 Byes)', count: 25 },
+                      { label: '32 Teams', count: 32 },
+                    ].map((p) => (
+                      <button
+                        key={p.count}
+                        type="button"
+                        onClick={() => setAutoTeamCount(p.count)}
+                        className={`px-2.5 py-1 rounded text-[11px] font-caps-label uppercase transition-all ${
+                          autoTeamCount === p.count
+                            ? 'bg-gold-accent text-navy-deep font-bold shadow'
+                            : 'bg-surface-container-lowest border border-outline-variant/30 text-fog-text hover:text-white hover:border-gold-accent/40'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min={4}
+                      max={32}
+                      value={autoTeamCount}
+                      onChange={(e) => setAutoTeamCount(Number(e.target.value))}
+                      className="flex-1 accent-gold-accent cursor-pointer"
+                    />
+                    <input
+                      type="number"
+                      min={4}
+                      max={32}
+                      value={autoTeamCount}
+                      onChange={(e) => setAutoTeamCount(Math.max(4, Math.min(32, Number(e.target.value) || 4)))}
+                      className="w-16 px-2 py-1 bg-surface-container-lowest border border-outline-variant/40 rounded text-center text-white text-xs font-bold font-table-numeral"
+                    />
                   </div>
                 </div>
-              );
-            })()}
 
-            {/* ── Date Configuration (Admin decides non-finals, Finals locked on Sep 10) ── */}
-            <div className="p-4 bg-navy-mid/60 border border-outline-variant/30 rounded mb-6">
-              <label className="block text-xs font-caps-label text-white uppercase mb-3 font-bold flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-sm text-gold-accent">event</span>
-                <span>Tournament Round Schedule Dates</span>
-              </label>
+                {/* Category */}
+                <div>
+                  <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
+                    Gender Category
+                  </label>
+                  <select
+                    value={autoGender}
+                    onChange={(e) => setAutoGender(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                  >
+                    <option value="boys">Boys Division</option>
+                    <option value="girls">Girls Division</option>
+                  </select>
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                {/* Round of 32 Date */}
-                {autoTeamCount > 16 && (
+                {/* Venue */}
+                <div>
+                  <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
+                    Primary Arena / Venue
+                  </label>
+                  <input
+                    type="text"
+                    value={autoVenue}
+                    onChange={(e) => setAutoVenue(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* ── Interactive Bracket Structure Summary Card ── */}
+              {(() => {
+                const N = autoTeamCount;
+                const byes = N > 16 ? 32 - N : N > 8 ? 16 - N : 0;
+                const r32Matches = N > 16 ? N - 16 : 0;
+                const r16Matches = N > 16 ? 8 : N > 8 ? N - 8 : 0;
+                const totalMatches = N - 1;
+
+                return (
+                  <div className="p-4 bg-surface-container-lowest border border-gold-accent/30 rounded space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-caps-label text-xs uppercase text-gold-accent font-bold flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-sm">account_tree</span>
+                        <span>Tournament Bracket Breakdown ({N} Teams)</span>
+                      </span>
+                      <span className="px-2 py-0.5 bg-gold-accent/20 border border-gold-accent/40 rounded text-[10px] font-caps-label text-gold-accent font-bold uppercase">
+                        {totalMatches} Total Matches
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs pt-1">
+                      {N > 16 ? (
+                        <>
+                          <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
+                            <div className="text-[10px] text-fog-text uppercase font-caps-label">Direct Byes to R16</div>
+                            <div className="font-display text-win-green text-sm font-bold">{byes} Teams</div>
+                          </div>
+                          <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
+                            <div className="text-[10px] text-fog-text uppercase font-caps-label">Round of 32</div>
+                            <div className="font-display text-white text-sm font-bold">{r32Matches} Matches</div>
+                          </div>
+                          <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
+                            <div className="text-[10px] text-fog-text uppercase font-caps-label">Round of 16</div>
+                            <div className="font-display text-white text-sm font-bold">8 Matches</div>
+                          </div>
+                          <div className="p-2 bg-surface-container rounded border border-gold-accent/30">
+                            <div className="text-[10px] text-gold-accent uppercase font-caps-label">Quarters &rarr; Final</div>
+                            <div className="font-display text-gold-accent text-sm font-bold">7 Matches (4+2+1)</div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
+                            <div className="text-[10px] text-fog-text uppercase font-caps-label">Bracket Size</div>
+                            <div className="font-display text-white text-sm font-bold">{N <= 4 ? 4 : N <= 8 ? 8 : 16}</div>
+                          </div>
+                          <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
+                            <div className="text-[10px] text-fog-text uppercase font-caps-label">Byes</div>
+                            <div className="font-display text-win-green text-sm font-bold">{byes} Teams</div>
+                          </div>
+                          <div className="p-2 bg-surface-container rounded border border-outline-variant/20">
+                            <div className="text-[10px] text-fog-text uppercase font-caps-label">Early Rounds</div>
+                            <div className="font-display text-white text-sm font-bold">{totalMatches - 3} Matches</div>
+                          </div>
+                          <div className="p-2 bg-surface-container rounded border border-gold-accent/30">
+                            <div className="text-[10px] text-gold-accent uppercase font-caps-label">Semis &amp; Final</div>
+                            <div className="font-display text-gold-accent text-sm font-bold">3 Matches (2+1)</div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ── Date Configuration (Admin decides non-finals, Finals locked on Sep 10) ── */}
+              <div className="p-4 bg-navy-mid/60 border border-outline-variant/30 rounded">
+                <label className="block text-xs font-caps-label text-white uppercase mb-3 font-bold flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm text-gold-accent">event</span>
+                  <span>Tournament Round Schedule Dates</span>
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                  {/* Round of 32 Date */}
+                  {autoTeamCount > 16 && (
+                    <div>
+                      <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
+                        Round of 32:
+                      </label>
+                      <input
+                        type="date"
+                        value={autoR32Date}
+                        onChange={(e) => setAutoR32Date(e.target.value)}
+                        required
+                        className="w-full px-2.5 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                      />
+                      <span className="text-[10px] text-win-green mt-1 block">Day 1 Morning</span>
+                    </div>
+                  )}
+
+                  {/* Round of 16 Date */}
+                  {autoTeamCount > 8 && (
+                    <div>
+                      <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
+                        Round of 16:
+                      </label>
+                      <input
+                        type="date"
+                        value={autoR16Date}
+                        onChange={(e) => setAutoR16Date(e.target.value)}
+                        required
+                        className="w-full px-2.5 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                      />
+                      <span className="text-[10px] text-win-green mt-1 block">Day 1 / Day 2</span>
+                    </div>
+                  )}
+
+                  {/* Quarter Date */}
                   <div>
                     <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
-                      Round of 32:
+                      Quarter-Finals:
                     </label>
                     <input
                       type="date"
-                      value={autoR32Date}
-                      onChange={(e) => setAutoR32Date(e.target.value)}
+                      value={autoQuarterDate}
+                      onChange={(e) => setAutoQuarterDate(e.target.value)}
                       required
                       className="w-full px-2.5 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
                     />
-                    <span className="text-[10px] text-win-green mt-1 block">Day 1 Morning</span>
+                    <span className="text-[10px] text-win-green mt-1 block">Day 2</span>
                   </div>
-                )}
 
-                {/* Round of 16 Date */}
-                {autoTeamCount > 8 && (
+                  {/* Semi Date */}
                   <div>
                     <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
-                      Round of 16:
+                      Semi-Finals:
                     </label>
                     <input
                       type="date"
-                      value={autoR16Date}
-                      onChange={(e) => setAutoR16Date(e.target.value)}
+                      value={autoSemiDate}
+                      onChange={(e) => setAutoSemiDate(e.target.value)}
                       required
                       className="w-full px-2.5 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
                     />
-                    <span className="text-[10px] text-win-green mt-1 block">Day 1 / Day 2</span>
+                    <span className="text-[10px] text-win-green mt-1 block">Day 2 Evening</span>
                   </div>
-                )}
 
-                {/* Quarter Date */}
-                <div>
-                  <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
-                    Quarter-Finals:
-                  </label>
-                  <input
-                    type="date"
-                    value={autoQuarterDate}
-                    onChange={(e) => setAutoQuarterDate(e.target.value)}
-                    required
-                    className="w-full px-2.5 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
-                  />
-                  <span className="text-[10px] text-win-green mt-1 block">Day 2</span>
-                </div>
-
-                {/* Semi Date */}
-                <div>
-                  <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
-                    Semi-Finals:
-                  </label>
-                  <input
-                    type="date"
-                    value={autoSemiDate}
-                    onChange={(e) => setAutoSemiDate(e.target.value)}
-                    required
-                    className="w-full px-2.5 py-1.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
-                  />
-                  <span className="text-[10px] text-win-green mt-1 block">Day 2 Evening</span>
-                </div>
-
-                {/* Finals Date (STRICTLY LOCKED TO SEP 10) */}
-                <div>
-                  <label className="block text-[11px] font-caps-label text-gold-accent uppercase mb-1 font-bold flex items-center gap-1">
-                    <span className="material-symbols-outlined text-xs">lock</span>
-                    <span>Grand Finals:</span>
-                  </label>
-                  <div className="px-2.5 py-1.5 bg-navy-mid rounded border border-gold-accent/50 text-gold-accent font-caps-label text-xs font-bold text-center">
-                    Sep 10, 2026
+                  {/* Finals Date (STRICTLY LOCKED TO SEP 10) */}
+                  <div>
+                    <label className="block text-[11px] font-caps-label text-gold-accent uppercase mb-1 font-bold flex items-center gap-1">
+                      <span className="material-symbols-outlined text-xs">lock</span>
+                      <span>Grand Finals:</span>
+                    </label>
+                    <div className="px-2.5 py-1.5 bg-navy-mid rounded border border-gold-accent/50 text-gold-accent font-caps-label text-xs font-bold text-center">
+                      Sep 10, 2026
+                    </div>
+                    <span className="text-[10px] text-gold-accent mt-1 block text-center font-caps-label">
+                      Grand Finale
+                    </span>
                   </div>
-                  <span className="text-[10px] text-gold-accent mt-1 block text-center font-caps-label">
-                    Grand Finale
-                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-3 border-t border-outline-variant/20">
+            {/* Modal Sticky Footer */}
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-outline-variant/20 flex-shrink-0 bg-surface-container mt-2">
               <button
                 type="button"
                 onClick={() => setIsAutoGenerating(false)}
-                className="px-4 py-2 border border-outline-variant/40 text-fog-text font-caps-label text-xs uppercase hover:text-white"
+                className="px-4 py-2 border border-outline-variant/40 text-fog-text font-caps-label text-xs uppercase hover:text-white hover:border-white transition-colors cursor-pointer"
               >
-                Cancel
+                Cancel / Close
               </button>
               <button
                 type="submit"
@@ -755,10 +812,15 @@ export default function AdminFixturesPage() {
 
       {/* ── INTERACTIVE SLOT PLACEMENT MODAL ── */}
       {slotAssignFixture && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSlotAssignFixture(null);
+          }}
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
+        >
           <form
             onSubmit={handleConfirmSlotPlacement}
-            className="w-full max-w-xl bg-surface-container border border-gold-accent p-6 rounded shadow-2xl"
+            className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-surface-container border border-gold-accent p-6 rounded shadow-2xl"
           >
             <div className="flex items-center justify-between pb-3 border-b border-outline-variant/30 mb-4">
               <div>
@@ -1129,18 +1191,33 @@ export default function AdminFixturesPage() {
           className="mb-8 p-6 bg-surface-container border border-gold-accent rounded shadow-xl"
         >
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/30 pb-3 mb-6">
-            <h3 className="font-display text-gold-accent uppercase text-lg">
-              SCHEDULE INDIVIDUAL MATCH &bull; {selectedGame.name} ({selectedGame.format.toUpperCase()})
-            </h3>
-            <span
-              className={`px-2.5 py-1 rounded text-xs font-caps-label uppercase font-bold ${
-                isTeamSport
-                  ? 'bg-gold-accent/20 text-gold-accent border border-gold-accent/40'
-                  : 'bg-primary/20 text-primary border border-primary/40'
-              }`}
-            >
-              {isTeamSport ? 'Team Match Setup' : 'Individual Singles Setup'}
-            </span>
+            <div>
+              <h3 className="font-display text-gold-accent uppercase text-lg">
+                SCHEDULE NEW MATCH &bull; {selectedGame.name} ({selectedGame.format.toUpperCase()})
+              </h3>
+              <p className="text-xs text-fog-text">
+                Select registered teams or participants for both sides, configure match timing, and register into database.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`px-2.5 py-1 rounded text-xs font-caps-label uppercase font-bold ${
+                  isTeamSport
+                    ? 'bg-gold-accent/20 text-gold-accent border border-gold-accent/40'
+                    : 'bg-primary/20 text-primary border border-primary/40'
+                }`}
+              >
+                {isTeamSport ? 'Team Match Setup' : 'Individual Singles Setup'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsCreating(false)}
+                className="px-2.5 py-1 bg-surface-container-lowest border border-outline-variant/40 rounded text-fog-text hover:text-white flex items-center gap-1 text-xs font-caps-label uppercase cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-xs">close</span>
+                <span>Cancel</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -1150,8 +1227,19 @@ export default function AdminFixturesPage() {
               </label>
               <select
                 value={gameId}
-                onChange={(e) => setGameId(e.target.value)}
-                className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                onChange={(e) => {
+                  const newId = e.target.value;
+                  setGameId(newId);
+                  const sel = games.find((g) => g.id === newId);
+                  if (sel) {
+                    if (sel.slug === 'badminton' || sel.slug === 'table-tennis') {
+                      // racket sport: preserve user choice or set to doubles
+                    } else {
+                      setSingleMatchFormat(sel.format === 'team' ? 'team' : 'individual');
+                    }
+                  }
+                }}
+                className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-bold text-gold-accent"
               >
                 {games.map((g) => (
                   <option key={g.id} value={g.id}>
@@ -1205,6 +1293,391 @@ export default function AdminFixturesPage() {
             </div>
           </div>
 
+          {/* Racket Sport Competition Mode Toggle */}
+          {isRacketSport && (
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-surface-container-lowest rounded border border-gold-accent/30 mb-6">
+              <span className="text-xs font-caps-label text-gold-accent uppercase font-bold flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-sm">sports_tennis</span>
+                <span>{selectedGame.name} Competition Mode:</span>
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSingleMatchFormat('team')}
+                  className={`px-3 py-1.5 rounded text-xs font-caps-label uppercase font-bold border transition-colors ${
+                    singleMatchFormat === 'team'
+                      ? 'bg-gold-accent/30 border-gold-accent text-gold-accent shadow-sm'
+                      : 'bg-surface-container border-transparent text-fog-text hover:text-white'
+                  }`}
+                >
+                  👥 Doubles / Pairs (2v2 Team)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSingleMatchFormat('individual')}
+                  className={`px-3 py-1.5 rounded text-xs font-caps-label uppercase font-bold border transition-colors ${
+                    singleMatchFormat === 'individual'
+                      ? 'bg-primary/30 border-primary text-white shadow-sm'
+                      : 'bg-surface-container border-transparent text-fog-text hover:text-white'
+                  }`}
+                >
+                  👤 Singles (1v1 Athlete)
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── COMPETITOR SELECTION FROM REGISTERED TEAMS / ATHLETES ── */}
+          {isTeamSport ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-6">
+              {/* Team A Selection Card */}
+              <div className="p-4 bg-surface-container-lowest rounded border border-gold-accent/30 space-y-3">
+                <div className="flex items-center justify-between border-b border-outline-variant/20 pb-2">
+                  <div className="font-caps-label text-xs uppercase text-gold-accent font-bold flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">shield</span>
+                    <span>TEAM A / FIRST COMPETITOR</span>
+                  </div>
+                  <span className="text-[10px] font-caps-label text-fog-text uppercase">
+                    {registeredTeams.filter((t) => t.batch_id === batchAId).length} Teams in Batch
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
+                    Select Batch / Department
+                  </label>
+                  <select
+                    value={batchAId}
+                    onChange={(e) => {
+                      const bId = e.target.value;
+                      setBatchAId(bId);
+                      setTeamAId('');
+                      const matchTeam = registeredTeams.find((t) => t.batch_id === bId);
+                      if (matchTeam) {
+                        setTeamAId(matchTeam.id);
+                        setTeamAName(matchTeam.name);
+                      }
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                  >
+                    {batches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.code} ({b.department?.name || 'MUET'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-caps-label text-gold-accent uppercase mb-1 font-bold">
+                    Choose from Registered Teams
+                  </label>
+                  <select
+                    value={teamAId}
+                    onChange={(e) => {
+                      setTeamAId(e.target.value);
+                      const t = registeredTeams.find((x) => x.id === e.target.value);
+                      if (t) setTeamAName(t.name);
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-surface-container border border-gold-accent/50 rounded text-white text-xs font-bold"
+                  >
+                    <option value="">-- Choose Registered Team or Type Below --</option>
+                    {registeredTeams
+                      .filter((t) => t.batch_id === batchAId)
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} {t.game ? `(${t.game.name})` : ''}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
+                    Team Name (Selected or Custom)
+                  </label>
+                  <input
+                    type="text"
+                    value={teamAName}
+                    onChange={(e) => setTeamAName(e.target.value)}
+                    placeholder="e.g. 24SW Cricket XI or Team Alpha"
+                    required
+                    className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs font-bold text-gold-accent"
+                  />
+                </div>
+              </div>
+
+              {/* Team B Selection Card */}
+              <div className="p-4 bg-surface-container-lowest rounded border border-outline-variant/30 space-y-3">
+                <div className="flex items-center justify-between border-b border-outline-variant/20 pb-2">
+                  <div className="font-caps-label text-xs uppercase text-fog-text font-bold flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">shield</span>
+                    <span>TEAM B / OPPONENT</span>
+                  </div>
+                  <span className="text-[10px] font-caps-label text-fog-text uppercase">
+                    {registeredTeams.filter((t) => t.batch_id === batchBId).length} Teams in Batch
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
+                    Select Batch / Department
+                  </label>
+                  <select
+                    value={batchBId}
+                    onChange={(e) => {
+                      const bId = e.target.value;
+                      setBatchBId(bId);
+                      setTeamBId('');
+                      const matchTeam = registeredTeams.find((t) => t.batch_id === bId);
+                      if (matchTeam) {
+                        setTeamBId(matchTeam.id);
+                        setTeamBName(matchTeam.name);
+                      }
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                  >
+                    {batches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.code} ({b.department?.name || 'MUET'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-caps-label text-gold-accent uppercase mb-1 font-bold">
+                    Choose from Registered Teams
+                  </label>
+                  <select
+                    value={teamBId}
+                    onChange={(e) => {
+                      setTeamBId(e.target.value);
+                      const t = registeredTeams.find((x) => x.id === e.target.value);
+                      if (t) setTeamBName(t.name);
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-surface-container border border-gold-accent/50 rounded text-white text-xs font-bold"
+                  >
+                    <option value="">-- Choose Registered Team or Type Below --</option>
+                    {registeredTeams
+                      .filter((t) => t.batch_id === batchBId)
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} {t.game ? `(${t.game.name})` : ''}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
+                    Team Name (Selected or Custom)
+                  </label>
+                  <input
+                    type="text"
+                    value={teamBName}
+                    onChange={(e) => setTeamBName(e.target.value)}
+                    placeholder="e.g. 23AI Cricket XI or Team Beta"
+                    required
+                    className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs font-bold text-white"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-6">
+              {/* Athlete A Selection Card */}
+              <div className="p-4 bg-surface-container-lowest rounded border border-primary/40 space-y-3">
+                <div className="flex items-center justify-between border-b border-outline-variant/20 pb-2">
+                  <div className="font-caps-label text-xs uppercase text-primary font-bold flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">person</span>
+                    <span>ATHLETE A (SINGLES)</span>
+                  </div>
+                  <span className="text-[10px] font-caps-label text-fog-text uppercase">
+                    {registeredPlayers.filter((p) => p.batch_id === batchAId).length} Players in Batch
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
+                    Select Batch / Department
+                  </label>
+                  <select
+                    value={batchAId}
+                    onChange={(e) => {
+                      const bId = e.target.value;
+                      setBatchAId(bId);
+                      setPlayerAId('');
+                      const matchPlayer = registeredPlayers.find((p) => p.batch_id === bId);
+                      if (matchPlayer) {
+                        setPlayerAId(matchPlayer.id);
+                        setPlayerAName(matchPlayer.name);
+                        setPlayerARollNo(matchPlayer.roll_no || '');
+                      }
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                  >
+                    {batches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.code} ({b.department?.name || 'MUET'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-caps-label text-primary uppercase mb-1 font-bold">
+                    Choose from Registered Participants
+                  </label>
+                  <select
+                    value={playerAId}
+                    onChange={(e) => {
+                      setPlayerAId(e.target.value);
+                      const p = registeredPlayers.find((x) => x.id === e.target.value);
+                      if (p) {
+                        setPlayerAName(p.name);
+                        setPlayerARollNo(p.roll_no || '');
+                      }
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-surface-container border border-primary/40 rounded text-white text-xs font-bold"
+                  >
+                    <option value="">-- Choose Registered Athlete or Type Below --</option>
+                    {registeredPlayers
+                      .filter((p) => p.batch_id === batchAId)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.roll_no || 'No Roll #'})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
+                      Athlete Name
+                    </label>
+                    <input
+                      type="text"
+                      value={playerAName}
+                      onChange={(e) => setPlayerAName(e.target.value)}
+                      placeholder="e.g. Hamza Shaikh"
+                      required
+                      className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs font-bold text-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
+                      Roll Number
+                    </label>
+                    <input
+                      type="text"
+                      value={playerARollNo}
+                      onChange={(e) => setPlayerARollNo(e.target.value)}
+                      placeholder="e.g. 24SW01"
+                      className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Athlete B Selection Card */}
+              <div className="p-4 bg-surface-container-lowest rounded border border-outline-variant/30 space-y-3">
+                <div className="flex items-center justify-between border-b border-outline-variant/20 pb-2">
+                  <div className="font-caps-label text-xs uppercase text-fog-text font-bold flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">person</span>
+                    <span>ATHLETE B (SINGLES)</span>
+                  </div>
+                  <span className="text-[10px] font-caps-label text-fog-text uppercase">
+                    {registeredPlayers.filter((p) => p.batch_id === batchBId).length} Players in Batch
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
+                    Select Batch / Department
+                  </label>
+                  <select
+                    value={batchBId}
+                    onChange={(e) => {
+                      const bId = e.target.value;
+                      setBatchBId(bId);
+                      setPlayerBId('');
+                      const matchPlayer = registeredPlayers.find((p) => p.batch_id === bId);
+                      if (matchPlayer) {
+                        setPlayerBId(matchPlayer.id);
+                        setPlayerBName(matchPlayer.name);
+                        setPlayerBRollNo(matchPlayer.roll_no || '');
+                      }
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                  >
+                    {batches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.code} ({b.department?.name || 'MUET'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-caps-label text-primary uppercase mb-1 font-bold">
+                    Choose from Registered Participants
+                  </label>
+                  <select
+                    value={playerBId}
+                    onChange={(e) => {
+                      setPlayerBId(e.target.value);
+                      const p = registeredPlayers.find((x) => x.id === e.target.value);
+                      if (p) {
+                        setPlayerBName(p.name);
+                        setPlayerBRollNo(p.roll_no || '');
+                      }
+                    }}
+                    className="w-full px-2.5 py-1.5 bg-surface-container border border-primary/40 rounded text-white text-xs font-bold"
+                  >
+                    <option value="">-- Choose Registered Athlete or Type Below --</option>
+                    {registeredPlayers
+                      .filter((p) => p.batch_id === batchBId)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.roll_no || 'No Roll #'})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
+                      Athlete Name
+                    </label>
+                    <input
+                      type="text"
+                      value={playerBName}
+                      onChange={(e) => setPlayerBName(e.target.value)}
+                      placeholder="e.g. Bilal Ahmed"
+                      required
+                      className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs font-bold text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1">
+                      Roll Number
+                    </label>
+                    <input
+                      type="text"
+                      value={playerBRollNo}
+                      onChange={(e) => setPlayerBRollNo(e.target.value)}
+                      placeholder="e.g. 23AI45"
+                      className="w-full px-2.5 py-1.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Date & Time */}
           <div className="p-4 bg-navy-mid/60 border border-outline-variant/30 rounded mb-6">
             <label className="block text-xs font-caps-label text-gold-accent uppercase mb-2 font-bold flex items-center gap-1.5">
@@ -1254,22 +1727,36 @@ export default function AdminFixturesPage() {
             </div>
           </div>
 
-          <button
-            type="submit"
-            className="px-6 py-2.5 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors cursor-pointer flex items-center gap-2 shadow-lg"
-          >
-            <span className="material-symbols-outlined text-base">event_available</span>
-            <span>Confirm &amp; Register Match</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              className="px-6 py-2.5 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors cursor-pointer flex items-center gap-2 shadow-lg"
+            >
+              <span className="material-symbols-outlined text-base">event_available</span>
+              <span>Confirm &amp; Register Match</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsCreating(false)}
+              className="px-5 py-2.5 border border-outline-variant/40 text-fog-text font-caps-label text-xs uppercase hover:text-white transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
         </form>
       )}
 
       {/* ── Edit Fixture Modal ── */}
       {editingFixture && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEditingFixture(null);
+          }}
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
+        >
           <form
             onSubmit={handleUpdateFixture}
-            className="w-full max-w-xl bg-surface-container border border-gold-accent p-6 rounded shadow-2xl"
+            className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-surface-container border border-gold-accent p-6 rounded shadow-2xl"
           >
             <div className="flex items-center justify-between pb-3 border-b border-outline-variant/30 mb-4">
               <h3 className="font-display text-gold-accent uppercase text-lg">
