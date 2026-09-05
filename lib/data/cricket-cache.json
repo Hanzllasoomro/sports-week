@@ -41,14 +41,7 @@
     },
     "batsmen_card": [],
     "bowlers_card": [],
-    "recent_balls": [
-      "1",
-      "4",
-      "W",
-      "0",
-      "6",
-      "1"
-    ],
+    "recent_balls": ["1", "4", "W", "0", "6", "1"],
     "crr": 16.71,
     "rrr": 8.25,
     "status_note": "24SW Strikers need 11 runs in 8 balls to win",
@@ -100,5 +93,52 @@
     "crr": 0,
     "rrr": null,
     "toss_note": "Team A won the toss & elected to bat"
+  },
+  "d6fb2042-734a-47a6-92f8-af09e516f799": {
+    "innings": 1,
+    "batting_team_id": "cb3ba014-95e9-4fce-a459-b6f25b4958c7",
+    "overs_limit": 6,
+    "target": null,
+    "team_a_cricket": {
+      "runs": 9,
+      "wickets": 0,
+      "overs": "1.3"
+    },
+    "team_b_cricket": {
+      "runs": 0,
+      "wickets": 0,
+      "overs": "0.0"
+    },
+    "current_batsmen": [
+      {
+        "name": "22SW Batter 1",
+        "runs": 5,
+        "balls": 5,
+        "fours": 1,
+        "sixes": 0,
+        "is_on_strike": true
+      },
+      {
+        "name": "22SW Batter 2",
+        "runs": 4,
+        "balls": 4,
+        "fours": 1,
+        "sixes": 0,
+        "is_on_strike": false
+      }
+    ],
+    "current_bowler": {
+      "name": "24SW Bowler 1",
+      "overs": "1.3",
+      "maidens": 0,
+      "runs_conceded": 9,
+      "wickets": 0
+    },
+    "batsmen_card": [],
+    "bowlers_card": [],
+    "recent_balls": ["1", "4", "2", "0"],
+    "crr": 6.0,
+    "rrr": null,
+    "toss_note": "22SW TITANS won the toss & elected to bat"
   }
 }

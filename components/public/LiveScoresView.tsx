@@ -59,11 +59,30 @@ export function LiveScoresView({ initialFixtures, games }: LiveScoresViewProps) 
   async function refreshScores() {
     setIsRefreshing(true);
     try {
-      const res = await fetch('/api/fixtures/live');
+      const res = await fetch('/api/fixtures/live', { cache: 'no-store' });
       if (res.ok) {
-        const data = await res.json();
+        const data: FixtureWithRelations[] = await res.json();
         if (data && Array.isArray(data)) {
-          setFixtures(data);
+          // For cricket fixtures, also fetch fresh cricket_details in parallel
+          const enriched = await Promise.all(
+            data.map(async (f) => {
+              if (f.game?.slug === 'cricket') {
+                try {
+                  const cr = await fetch(`/api/cricket/${f.id}`, { cache: 'no-store' });
+                  if (cr.ok) {
+                    const details = await cr.json();
+                    if (details && typeof details === 'object') {
+                      return { ...f, cricket_details: details };
+                    }
+                  }
+                } catch {
+                  // ignore, use whatever the fixtures api returned
+                }
+              }
+              return f;
+            })
+          );
+          setFixtures(enriched);
         }
       }
     } catch {

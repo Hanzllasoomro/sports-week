@@ -68,8 +68,14 @@ export async function getFixtures(day?: 1 | 2 | 3, status?: string): Promise<Fix
       const { retrieveCricketDetails } = await import('@/lib/data/cricket-store');
       const enriched = await Promise.all(
         data.map(async (item: any) => {
-          if (item.game?.slug === 'cricket' && !item.cricket_details) {
-            item.cricket_details = await retrieveCricketDetails(item.id);
+          if (item.game?.slug === 'cricket') {
+            // Always pull from our multi-tier cricket store (local cache + Supabase JSONB fallback)
+            // This guarantees the freshest scoring data regardless of whether Supabase
+            // has the cricket_details column or not.
+            const stored = await retrieveCricketDetails(item.id);
+            if (stored) {
+              item.cricket_details = stored;
+            }
           }
           return item;
         })
