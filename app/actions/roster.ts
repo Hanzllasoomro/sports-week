@@ -570,10 +570,9 @@ export async function createTeam(raw: unknown): Promise<ActionResult<Team & { pl
 
     if (error) {
       if (error.code === '23505') {
-        const batchCode = teamFields.batch_id ? 'this batch' : 'the batch';
         return {
           error: {
-            message: `Squad Conflict: A team is already registered for ${batchCode} in this sport and gender division. The database currently enforces one team per Batch/Sport/Gender (constraint: teams_game_id_batch_id_gender_key).`,
+            message: `Duplicate Squad Name: A squad named "${teamFields.name}" is already registered for this batch in this sport. Please choose a distinct squad name (e.g. Team A, Team B).`,
             code: 'DUPLICATE_TEAM',
           },
         };

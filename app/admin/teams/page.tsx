@@ -480,10 +480,21 @@ export default function AdminTeamsPage() {
     setTimeout(() => setFeedback(null), 4500);
   }
 
-  // Real-time check for duplicate squad in Add form (game_id, batch_id, gender)
+  // Real-time check for duplicate squad in Add form (game_id, batch_id, gender, name)
   const existingSquadConflict =
     isAdding &&
+    formData.name.trim() &&
     teams.find(
+      (t) =>
+        t.game_id === formData.game_id &&
+        t.batch_id === formData.batch_id &&
+        t.gender === formData.gender &&
+        t.name.trim().toLowerCase() === formData.name.trim().toLowerCase()
+    );
+
+  const existingBatchSquadsInSport =
+    isAdding &&
+    teams.filter(
       (t) =>
         t.game_id === formData.game_id &&
         t.batch_id === formData.batch_id &&
@@ -496,7 +507,7 @@ export default function AdminTeamsPage() {
     if (!formData.name) return;
 
     if (existingSquadConflict) {
-      alert(`Squad Conflict: "${existingSquadConflict.name}" is already registered for this Batch in ${existingSquadConflict.game} (${existingSquadConflict.gender}). The database allows only 1 squad per batch/sport/gender.`);
+      alert(`Squad Conflict: A squad named "${existingSquadConflict.name}" is already registered for this Batch in ${existingSquadConflict.game} (${existingSquadConflict.gender}). Please choose a distinct squad name.`);
       return;
     }
 
@@ -1115,16 +1126,31 @@ export default function AdminTeamsPage() {
             REGISTER NEW SQUAD &amp; LINEUP
           </h3>
 
-          {/* Real-time duplicate squad warning */}
+          {/* Real-time duplicate squad warning (same squad name) */}
           {existingSquadConflict && (
             <div className="p-3.5 bg-live-red/20 border border-live-red/50 rounded text-xs text-live-red font-caps-label flex items-start gap-2.5">
               <span className="material-symbols-outlined text-base shrink-0 mt-0.5">warning</span>
               <div>
                 <span className="font-bold block">
-                  Squad Conflict: &quot;{existingSquadConflict.name}&quot; is already registered for this batch in {existingSquadConflict.game} ({existingSquadConflict.gender}).
+                  Duplicate Squad Name: &quot;{existingSquadConflict.name}&quot; is already registered for this batch in {existingSquadConflict.game} ({existingSquadConflict.gender}).
                 </span>
                 <span className="text-[11px] text-fog-text block mt-0.5">
-                  The database currently enforces 1 squad per Batch/Sport/Gender (constraint: teams_game_id_batch_id_gender_key). Select a different batch or sport, or run the migration to allow multiple squads.
+                  Please choose a distinct squad name (e.g. {existingSquadConflict.name} B, Section 2).
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Info banner when other squads already exist for this batch in this sport */}
+          {!existingSquadConflict && existingBatchSquadsInSport && existingBatchSquadsInSport.length > 0 && (
+            <div className="p-3 bg-navy-mid/60 border border-gold-accent/40 rounded text-xs text-gold-accent font-caps-label flex items-start gap-2.5">
+              <span className="material-symbols-outlined text-base shrink-0 mt-0.5">info</span>
+              <div>
+                <span className="font-bold block">
+                  Batch already has {existingBatchSquadsInSport.length} registered squad(s) in this sport: {existingBatchSquadsInSport.map((t: any) => t.name).join(', ')}
+                </span>
+                <span className="text-[11px] text-fog-text block mt-0.5">
+                  Multiple squads per batch are supported! Just give this squad a unique name.
                 </span>
               </div>
             </div>
