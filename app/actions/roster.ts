@@ -186,6 +186,253 @@ export async function scanAllDuplicatePlayers(): Promise<{
   }
 }
 
+export interface TeamListPlayerInput {
+  name: string;
+  roll_no?: string | null;
+  slotType?: 'playing' | 'optional';
+}
+
+export interface RegisterTeamListParams {
+  batch_id: string;
+  gender: 'boys' | 'girls';
+  players: TeamListPlayerInput[];
+  team_id?: string;
+}
+
+export interface ProcessedTeamPlayer {
+  id: string;
+  name: string;
+  roll_no: string | null;
+  batch_id: string;
+  gender: 'boys' | 'girls';
+  status: 'newly_registered' | 'already_registered' | 'conflict';
+  conflictType?: 'exact_duplicate' | 'roll_conflict' | 'name_conflict';
+  conflictMessage?: string;
+  slotType?: 'playing' | 'optional';
+}
+
+export interface RegisterTeamListResult {
+  totalProcessed: number;
+  newlyRegisteredCount: number;
+  alreadyRegisteredCount: number;
+  conflictsCount: number;
+  players: ProcessedTeamPlayer[];
+  resolvedPlayingIds: string[];
+  resolvedOptionalIds: string[];
+  conflicts: Array<{
+    name: string;
+    roll_no?: string | null;
+    conflictType: 'exact_duplicate' | 'roll_conflict' | 'name_conflict';
+    message: string;
+  }>;
+}
+
+/**
+ * Registers athletes from a team list into the tournament database if not already registered,
+ * while checking for duplicates on Roll Number, Name, or Both.
+ */
+export async function registerPlayersFromTeamList(
+  params: RegisterTeamListParams
+): Promise<ActionResult<RegisterTeamListResult>> {
+  if (!params.batch_id) {
+    return { error: { message: 'Batch ID is required', code: 'VALIDATION_ERROR' } };
+  }
+  if (!params.gender) {
+    return { error: { message: 'Gender is required', code: 'VALIDATION_ERROR' } };
+  }
+  if (!params.players || params.players.length === 0) {
+    return { error: { message: 'No players provided in team list', code: 'VALIDATION_ERROR' } };
+  }
+
+  try {
+    const supabase = await createServiceClient();
+
+    // Fetch all existing players across all batches to check cross-batch and in-batch duplication
+    const { data: dbPlayers, error } = await supabase
+      .from('players')
+      .select('id, name, roll_no, batch_id, gender, batches(code)');
+
+    if (error) throw error;
+
+    const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const clean = (s: string) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+    const getBatchCode = (p: any) => {
+      if (!p?.batches) return 'Batch';
+      if (Array.isArray(p.batches) && p.batches[0]?.code) return p.batches[0].code;
+      if (p.batches.code) return p.batches.code;
+      return 'Batch';
+    };
+
+    const currentRoster: any[] = dbPlayers ? [...dbPlayers] : [];
+    const processed: ProcessedTeamPlayer[] = [];
+    const conflicts: RegisterTeamListResult['conflicts'] = [];
+    const resolvedPlayingIds: string[] = [];
+    const resolvedOptionalIds: string[] = [];
+
+    for (const item of params.players) {
+      const rawName = item.name ? item.name.trim() : '';
+      if (!rawName) continue;
+
+      const rawRoll = item.roll_no ? item.roll_no.trim() : null;
+      const nName = clean(rawName);
+      const nRoll = rawRoll ? norm(rawRoll) : null;
+
+      // 1. Check EXACT match on BOTH Name AND Roll Number
+      const matchBoth = currentRoster.find(
+        (p) => clean(p.name) === nName && nRoll && norm(p.roll_no || '') === nRoll
+      );
+
+      if (matchBoth) {
+        // Player is ALREADY registered with both name and roll number! Re-use player
+        processed.push({
+          id: matchBoth.id,
+          name: matchBoth.name,
+          roll_no: matchBoth.roll_no || rawRoll,
+          batch_id: matchBoth.batch_id,
+          gender: matchBoth.gender,
+          status: 'already_registered',
+          slotType: item.slotType,
+        });
+
+        if (item.slotType === 'optional') {
+          if (!resolvedOptionalIds.includes(matchBoth.id)) resolvedOptionalIds.push(matchBoth.id);
+        } else {
+          if (!resolvedPlayingIds.includes(matchBoth.id)) resolvedPlayingIds.push(matchBoth.id);
+        }
+        continue;
+      }
+
+      // 2. Check conflict on Roll Number (roll number matches someone else, but name is different)
+      if (nRoll) {
+        const matchRoll = currentRoster.find(
+          (p) => norm(p.roll_no || '') === nRoll && clean(p.name) !== nName
+        );
+        if (matchRoll) {
+          const msg = `Roll number "${rawRoll}" is already assigned to "${matchRoll.name}" (${getBatchCode(matchRoll)}).`;
+          conflicts.push({
+            name: rawName,
+            roll_no: rawRoll,
+            conflictType: 'roll_conflict',
+            message: msg,
+          });
+          processed.push({
+            id: matchRoll.id,
+            name: rawName,
+            roll_no: rawRoll,
+            batch_id: params.batch_id,
+            gender: params.gender,
+            status: 'conflict',
+            conflictType: 'roll_conflict',
+            conflictMessage: msg,
+            slotType: item.slotType,
+          });
+          continue;
+        }
+      }
+
+      // 3. Check conflict or match on Name within the same batch
+      const matchNameBatch = currentRoster.find(
+        (p) => p.batch_id === params.batch_id && clean(p.name) === nName
+      );
+
+      if (matchNameBatch) {
+        // If existing player has no roll number and team list provides one, update it
+        if (!matchNameBatch.roll_no && rawRoll) {
+          await supabase.from('players').update({ roll_no: rawRoll }).eq('id', matchNameBatch.id);
+          matchNameBatch.roll_no = rawRoll;
+        }
+
+        processed.push({
+          id: matchNameBatch.id,
+          name: matchNameBatch.name,
+          roll_no: matchNameBatch.roll_no || rawRoll,
+          batch_id: matchNameBatch.batch_id,
+          gender: matchNameBatch.gender,
+          status: 'already_registered',
+          slotType: item.slotType,
+        });
+
+        if (item.slotType === 'optional') {
+          if (!resolvedOptionalIds.includes(matchNameBatch.id)) resolvedOptionalIds.push(matchNameBatch.id);
+        } else {
+          if (!resolvedPlayingIds.includes(matchNameBatch.id)) resolvedPlayingIds.push(matchNameBatch.id);
+        }
+        continue;
+      }
+
+      // 4. NOT REGISTERED -> Register new player into database
+      const insertPayload = {
+        name: rawName,
+        roll_no: rawRoll,
+        batch_id: params.batch_id,
+        gender: params.gender,
+      };
+
+      const { data: newPlayer, error: insError } = await supabase
+        .from('players')
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (insError) {
+        console.error('Failed to insert player from team list:', insError);
+        continue;
+      }
+
+      currentRoster.push(newPlayer);
+
+      processed.push({
+        id: newPlayer.id,
+        name: newPlayer.name,
+        roll_no: newPlayer.roll_no,
+        batch_id: newPlayer.batch_id,
+        gender: newPlayer.gender,
+        status: 'newly_registered',
+        slotType: item.slotType,
+      });
+
+      if (item.slotType === 'optional') {
+        if (!resolvedOptionalIds.includes(newPlayer.id)) resolvedOptionalIds.push(newPlayer.id);
+      } else {
+        if (!resolvedPlayingIds.includes(newPlayer.id)) resolvedPlayingIds.push(newPlayer.id);
+      }
+    }
+
+    // Optional: If team_id is provided, automatically persist squad lineup
+    if (params.team_id) {
+      const { persistTeamSquad } = await import('@/lib/data/team-squad-store');
+      await persistTeamSquad(params.team_id, {
+        playing_player_ids: resolvedPlayingIds,
+        optional_player_ids: resolvedOptionalIds,
+      });
+    }
+
+    revalidatePath('/admin/teams');
+    revalidatePath('/admin/players');
+    revalidatePath('/admin/fixtures');
+    revalidatePath('/teams');
+
+    return {
+      data: {
+        totalProcessed: processed.length,
+        newlyRegisteredCount: processed.filter((p) => p.status === 'newly_registered').length,
+        alreadyRegisteredCount: processed.filter((p) => p.status === 'already_registered').length,
+        conflictsCount: conflicts.length,
+        players: processed,
+        resolvedPlayingIds,
+        resolvedOptionalIds,
+        conflicts,
+      },
+    };
+  } catch (err: unknown) {
+    console.error('[registerPlayersFromTeamList]', err);
+    const message = err instanceof Error ? err.message : 'Failed to register players from team list';
+    return { error: { message, code: 'DB_ERROR' } };
+  }
+}
+
+
 export async function createPlayer(raw: unknown): Promise<ActionResult<Player>> {
   const parsed = PlayerCreateSchema.safeParse(raw);
   if (!parsed.success) {

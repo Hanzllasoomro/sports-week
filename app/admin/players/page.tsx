@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { createPlayer, updatePlayer, deletePlayer, scanAllDuplicatePlayers } from '@/app/actions/roster';
+import { useState, useEffect, useMemo } from 'react';
+import { createPlayer, updatePlayer, deletePlayer, scanAllDuplicatePlayers, registerPlayersFromTeamList } from '@/app/actions/roster';
 import { MOCK_BATCHES } from '@/lib/mock-data';
 
 export default function AdminPlayersPage() {
@@ -38,6 +38,13 @@ export default function AdminPlayersPage() {
     batch_id: MOCK_BATCHES[2].id,
     gender: 'boys' as 'boys' | 'girls',
   });
+
+  // Team List Import State
+  const [isImportingTeamList, setIsImportingTeamList] = useState(false);
+  const [importTeamListText, setImportTeamListText] = useState('');
+  const [importBatchId, setImportBatchId] = useState(MOCK_BATCHES[2].id);
+  const [importGender, setImportGender] = useState<'boys' | 'girls'>('boys');
+  const [isSubmittingImport, setIsSubmittingImport] = useState(false);
 
   // Normalization helpers for duplicate detection
   const cleanStr = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -77,6 +84,143 @@ export default function AdminPlayersPage() {
             cleanStr(p.roll_no) === cleanStr(editingPlayer.roll_no)
         )
       : null;
+
+  // Real-time Parser & Duplicate Analyzer for Team List
+  const parsedImportList = useMemo(() => {
+    if (!importTeamListText.trim()) return [];
+    const lines = importTeamListText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
+    return lines.map((line) => {
+      let clean = line.replace(/^\s*(?:#?\d+[\.\)\-:]\s*|[\-\*•]\s*)/, '').trim();
+      let extractedName = clean;
+      let extractedRoll: string | null = null;
+
+      const rollRegex = /\b(2[0-9][- ]?(?:SW|BSAI|AI|CS|IT|EL|ES)[- ]?[0-9]{1,4})\b/i;
+      const match = clean.match(rollRegex);
+
+      if (match) {
+        extractedRoll = match[1].replace(/[- ]/g, '').toUpperCase();
+        extractedName = clean.replace(match[0], '').replace(/[\(\)\[\],\-\t|:]/g, ' ').replace(/\s+/g, ' ').trim();
+      } else {
+        const delimMatch = clean.match(/^(.*?)(?:[,\t\-|–—]|\s*\((.*?)\))\s*([A-Za-z0-9]+)?$/);
+        if (delimMatch) {
+          const part1 = (delimMatch[1] || '').trim();
+          const part2 = (delimMatch[2] || delimMatch[3] || '').trim();
+          if (part2 && /^[A-Za-z0-9]{3,10}$/.test(part2)) {
+            extractedName = part1;
+            extractedRoll = part2.toUpperCase();
+          }
+        }
+      }
+
+      const nName = cleanName(extractedName);
+      const nRoll = extractedRoll ? cleanStr(extractedRoll) : null;
+
+      // Check duplicate on BOTH Name and Roll Number
+      const matchBoth = players.find(
+        (p) => cleanName(p.name) === nName && nRoll && cleanStr(p.roll_no || '') === nRoll
+      );
+      if (matchBoth) {
+        return {
+          name: extractedName,
+          roll_no: extractedRoll,
+          status: 'already_registered' as const,
+          matchedPlayer: matchBoth,
+        };
+      }
+
+      // Check conflict on Roll Number
+      if (nRoll) {
+        const rollConflict = players.find(
+          (p) => cleanStr(p.roll_no || '') === nRoll && cleanName(p.name) !== nName
+        );
+        if (rollConflict) {
+          return {
+            name: extractedName,
+            roll_no: extractedRoll,
+            status: 'roll_conflict' as const,
+            conflictMessage: `Roll number ${extractedRoll} belongs to ${rollConflict.name} (${rollConflict.batch || 'Batch'})`,
+            matchedPlayer: rollConflict,
+          };
+        }
+      }
+
+      // Check conflict on Name within batch
+      const nameMatch = players.find(
+        (p) => p.batch_id === importBatchId && cleanName(p.name) === nName
+      );
+      if (nameMatch) {
+        return {
+          name: extractedName,
+          roll_no: extractedRoll,
+          status: 'name_conflict' as const,
+          conflictMessage: `Athlete named "${nameMatch.name}" already registered in this batch`,
+          matchedPlayer: nameMatch,
+        };
+      }
+
+      return {
+        name: extractedName,
+        roll_no: extractedRoll,
+        status: 'new_player' as const,
+      };
+    });
+  }, [importTeamListText, players, importBatchId]);
+
+  const parsedImportSummary = useMemo(() => {
+    const newCount = parsedImportList.filter((p) => p.status === 'new_player').length;
+    const alreadyCount = parsedImportList.filter((p) => p.status === 'already_registered').length;
+    const conflictCount = parsedImportList.filter((p) => p.status === 'roll_conflict' || p.status === 'name_conflict').length;
+    return { newCount, alreadyCount, conflictCount };
+  }, [parsedImportList]);
+
+  async function handleImportTeamListSubmit() {
+    if (parsedImportList.length === 0) return;
+
+    setIsSubmittingImport(true);
+    setFeedback('Registering unregistered players from team list...');
+
+    const res = await registerPlayersFromTeamList({
+      batch_id: importBatchId,
+      gender: importGender,
+      players: parsedImportList.map((p) => ({
+        name: p.name,
+        roll_no: p.roll_no,
+      })),
+    });
+
+    if (res.error) {
+      setFeedback(`Error: ${res.error.message}`);
+      setIsSubmittingImport(false);
+      return;
+    }
+
+    const data = res.data!;
+    const b = MOCK_BATCHES.find((x) => x.id === importBatchId);
+
+    const newlyAdded: any[] = data.players
+      .filter((p) => p.status === 'newly_registered')
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        roll_no: p.roll_no || 'Pending',
+        batch_id: p.batch_id,
+        batch: b?.code || 'Batch',
+        gender: p.gender,
+      }));
+
+    if (newlyAdded.length > 0) {
+      setPlayers([...newlyAdded, ...players]);
+    }
+
+    setIsSubmittingImport(false);
+    setIsImportingTeamList(false);
+    setImportTeamListText('');
+    setFeedback(
+      `Roster updated! ${data.newlyRegisteredCount} newly registered in database, ${data.alreadyRegisteredCount} matched & verified, ${data.conflictsCount} conflicts.`
+    );
+    setTimeout(() => setFeedback(null), 4500);
+  }
 
   // Load real players on mount
   useEffect(() => {
@@ -305,7 +449,25 @@ export default function AdminPlayersPage() {
           <button
             type="button"
             onClick={() => {
+              setIsImportingTeamList(!isImportingTeamList);
+              setIsAdding(false);
+              setIsAuditingDuplicates(false);
+            }}
+            className={`font-caps-label text-xs uppercase px-4 py-2.5 font-bold transition-colors cursor-pointer w-fit flex items-center gap-2 border ${
+              isImportingTeamList
+                ? 'bg-navy-mid text-gold-accent border-gold-accent'
+                : 'border-gold-accent/40 text-gold-accent hover:bg-gold-accent hover:text-navy-deep'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">playlist_add_check</span>
+            <span>{isImportingTeamList ? 'Close Importer' : 'Import Team List'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
               setIsAdding(!isAdding);
+              setIsImportingTeamList(false);
               setEditingPlayer(null);
             }}
             className="bg-gold-accent text-navy-deep font-caps-label text-xs uppercase px-4 py-2.5 font-bold hover:bg-white transition-colors cursor-pointer w-fit flex items-center gap-2"
@@ -457,6 +619,177 @@ export default function AdminPlayersPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Team List Importer & Duplicate Checker ── */}
+      {isImportingTeamList && (
+        <div className="mb-8 p-6 bg-surface-container border-2 border-gold-accent/70 rounded shadow-2xl animate-in fade-in-50 duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-outline-variant/30 pb-3 mb-4">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-gold-accent text-2xl">playlist_add_check</span>
+              <div>
+                <h3 className="font-display text-white text-lg uppercase tracking-wide">
+                  BULK ATHLETE REGISTRATION FROM TEAM LIST
+                </h3>
+                <p className="font-body text-fog-text text-xs">
+                  Paste full team roster with names and roll numbers. Unregistered athletes will be registered automatically, with duplicate checks on roll number, name, or both.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsImportingTeamList(false)}
+              className="text-fog-text hover:text-white"
+            >
+              <span className="material-symbols-outlined text-base">close</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
+                Target Academic Batch
+              </label>
+              <select
+                value={importBatchId}
+                onChange={(e) => setImportBatchId(e.target.value)}
+                className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-bold"
+              >
+                {MOCK_BATCHES.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.code} ({b.department.code} - Year {b.year})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
+                Gender Division
+              </label>
+              <select
+                value={importGender}
+                onChange={(e) => setImportGender(e.target.value as any)}
+                className="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+              >
+                <option value="boys">Boys</option>
+                <option value="girls">Girls</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1 font-bold">
+                Paste / Enter Player List (One athlete per line)
+              </label>
+              <textarea
+                rows={8}
+                value={importTeamListText}
+                onChange={(e) => setImportTeamListText(e.target.value)}
+                placeholder={`1. Asad Memon - 24SW048\n2. Bilal Khan, 24SW12\n3. Farhan Ali (24SW33)\n4. Zubair Ahmed\t24SW99\n5. Tariq Shah`}
+                className="w-full p-3 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-mono focus:border-gold-accent focus:outline-none"
+              />
+              <span className="text-[10px] text-fog-text block mt-1">
+                Accepts lines with dashes, commas, tabs, parentheses or plain names.
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-caps-label text-fog-text uppercase font-bold">
+                  Live Duplicate Verification ({parsedImportList.length} Athletes)
+                </span>
+                <div className="flex items-center gap-1.5 text-[10px] font-caps-label">
+                  <span className="px-2 py-0.5 rounded bg-win-green/20 text-win-green font-bold">
+                    {parsedImportSummary.newCount} New
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-navy-mid text-gold-accent font-bold border border-gold-accent/30">
+                    {parsedImportSummary.alreadyCount} Registered
+                  </span>
+                  {parsedImportSummary.conflictCount > 0 && (
+                    <span className="px-2 py-0.5 rounded bg-live-red/20 text-live-red font-bold">
+                      {parsedImportSummary.conflictCount} Conflicts
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1 bg-surface-container-lowest/60 p-2 rounded border border-outline-variant/20">
+                {parsedImportList.length === 0 ? (
+                  <div className="text-center py-10 text-xs text-fog-text italic">
+                    Paste athlete names &amp; roll numbers to preview real-time registration &amp; duplicate check status.
+                  </div>
+                ) : (
+                  parsedImportList.map((entry, idx) => (
+                    <div
+                      key={idx}
+                      className="p-2 bg-surface-container rounded border border-outline-variant/20 flex items-center justify-between text-xs gap-2"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="font-mono text-[10px] text-fog-text w-4">{idx + 1}.</span>
+                        <span className="font-bold text-white truncate">{entry.name}</span>
+                        <span className="text-[10px] text-fog-text font-mono">
+                          ({entry.roll_no || 'No roll no'})
+                        </span>
+                      </div>
+
+                      <div className="shrink-0">
+                        {entry.status === 'already_registered' && (
+                          <span className="px-2 py-0.5 rounded bg-navy-mid text-gold-accent text-[10px] font-caps-label font-bold border border-gold-accent/40 flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">verified</span>
+                            <span>Already Registered</span>
+                          </span>
+                        )}
+                        {entry.status === 'new_player' && (
+                          <span className="px-2 py-0.5 rounded bg-win-green/20 text-win-green text-[10px] font-caps-label font-bold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">person_add</span>
+                            <span>Will Register</span>
+                          </span>
+                        )}
+                        {entry.status === 'roll_conflict' && (
+                          <span
+                            title={entry.conflictMessage}
+                            className="px-2 py-0.5 rounded bg-live-red/20 text-live-red text-[10px] font-caps-label font-bold flex items-center gap-1 cursor-help"
+                          >
+                            <span className="material-symbols-outlined text-xs">warning</span>
+                            <span>Roll Conflict</span>
+                          </span>
+                        )}
+                        {entry.status === 'name_conflict' && (
+                          <span
+                            title={entry.conflictMessage}
+                            className="px-2 py-0.5 rounded bg-gold-accent/20 text-gold-accent text-[10px] font-caps-label font-bold flex items-center gap-1 cursor-help"
+                          >
+                            <span className="material-symbols-outlined text-xs">info</span>
+                            <span>Same Name</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="flex justify-end pt-3 border-t border-outline-variant/20">
+                <button
+                  type="button"
+                  onClick={handleImportTeamListSubmit}
+                  disabled={isSubmittingImport || parsedImportList.length === 0}
+                  className="px-5 py-2.5 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-extrabold rounded hover:bg-white transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-sm">
+                    {isSubmittingImport ? 'sync' : 'how_to_reg'}
+                  </span>
+                  <span>
+                    {isSubmittingImport ? 'Registering Athletes...' : 'Register Unregistered Athletes'}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

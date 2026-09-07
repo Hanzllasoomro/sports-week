@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { createTeam, updateTeam, deleteTeam, createPlayer } from '@/app/actions/roster';
+import { useState, useEffect, useMemo } from 'react';
+import { createTeam, updateTeam, deleteTeam, createPlayer, registerPlayersFromTeamList, type TeamListPlayerInput } from '@/app/actions/roster';
 import { MOCK_BATCHES, MOCK_GAMES } from '@/lib/mock-data';
 import { getSquadRulesForGame } from '@/lib/constants/squad-rules';
 import { cn } from '@/lib/utils';
@@ -29,6 +29,11 @@ export default function AdminTeamsPage() {
   const [quickPlayerName, setQuickPlayerName] = useState('');
   const [quickPlayerRoll, setQuickPlayerRoll] = useState('');
   const [isQuickAdding, setIsQuickAdding] = useState(false);
+
+  // Team List Import & Duplicate Detection state
+  const [showTeamListImport, setShowTeamListImport] = useState(false);
+  const [teamListRawText, setTeamListRawText] = useState('');
+  const [isProcessingTeamList, setIsProcessingTeamList] = useState(false);
 
   // Add Form State with squad selections
   const [formData, setFormData] = useState({
@@ -227,15 +232,55 @@ export default function AdminTeamsPage() {
     }
   }
 
-  // Inline Quick Athlete Registration Handler
+  // Inline Quick Athlete Registration Handler with duplicate checking
   async function handleQuickAddAthlete(e: React.FormEvent) {
     e.preventDefault();
     if (!quickPlayerName.trim()) return;
 
+    const cleanName = quickPlayerName.trim();
+    const cleanRoll = quickPlayerRoll.trim();
+    const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normName = cleanName.toLowerCase().replace(/\s+/g, ' ');
+
+    // 1. Check if athlete is ALREADY registered with both name and roll_no
+    const alreadyRegistered = players.find(
+      (p) =>
+        p.name.toLowerCase().replace(/\s+/g, ' ') === normName &&
+        cleanRoll &&
+        norm(p.roll_no || '') === norm(cleanRoll)
+    );
+
+    if (alreadyRegistered) {
+      // Draft directly into squad lineup without creating duplicate
+      if (currentPlayingIds.length < squadRules.playingCount) {
+        handleAddToPlaying(alreadyRegistered.id);
+      } else if (currentOptionalIds.length < squadRules.optionalCount) {
+        handleAddToOptional(alreadyRegistered.id);
+      }
+      setQuickPlayerName('');
+      setQuickPlayerRoll('');
+      setShowQuickAddPlayer(false);
+      setFeedback(`Athlete ${alreadyRegistered.name} is already registered. Added to squad lineup!`);
+      setTimeout(() => setFeedback(null), 3000);
+      return;
+    }
+
+    // 2. Check roll number duplication conflict
+    if (cleanRoll) {
+      const rollConflict = players.find(
+        (p) => norm(p.roll_no || '') === norm(cleanRoll) && p.name.toLowerCase().replace(/\s+/g, ' ') !== normName
+      );
+      if (rollConflict) {
+        const bCode = typeof rollConflict.batch === 'object' ? rollConflict.batch?.code : rollConflict.batch || 'Batch';
+        alert(`Roll Number Conflict: Roll number "${cleanRoll}" is already assigned to "${rollConflict.name}" (${bCode}).`);
+        return;
+      }
+    }
+
     setIsQuickAdding(true);
     const res = await createPlayer({
-      name: quickPlayerName.trim(),
-      roll_no: quickPlayerRoll.trim() || undefined,
+      name: cleanName,
+      roll_no: cleanRoll || undefined,
       batch_id: activeBatchId,
       gender: activeGender,
     });
@@ -245,8 +290,8 @@ export default function AdminTeamsPage() {
     } else {
       const newPlayer: Player = res.data || {
         id: `p-quick-${Date.now()}`,
-        name: quickPlayerName.trim(),
-        roll_no: quickPlayerRoll.trim(),
+        name: cleanName,
+        roll_no: cleanRoll,
         batch_id: activeBatchId,
         gender: activeGender,
       };
@@ -267,6 +312,172 @@ export default function AdminTeamsPage() {
       setTimeout(() => setFeedback(null), 3000);
     }
     setIsQuickAdding(false);
+  }
+
+  // Real-time Parser & Duplicate Analyzer for Team List
+  const parsedTeamList = useMemo(() => {
+    if (!teamListRawText.trim()) return [];
+    const lines = teamListRawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
+    const normStr = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normNameStr = (s: string) => (s || '').toLowerCase().trim().replace(/\s+/g, ' ');
+
+    return lines.map((line) => {
+      // Remove leading numbering e.g. "1.", "1)", "1 - ", "#1", "* "
+      let clean = line.replace(/^\s*(?:#?\d+[\.\)\-:]\s*|[\-\*•]\s*)/, '').trim();
+      let extractedName = clean;
+      let extractedRoll: string | null = null;
+
+      // Match roll number like 24SW048, 25BSAI19, 23AI01, 22SW100
+      const rollRegex = /\b(2[0-9][- ]?(?:SW|BSAI|AI|CS|IT|EL|ES)[- ]?[0-9]{1,4})\b/i;
+      const match = clean.match(rollRegex);
+
+      if (match) {
+        extractedRoll = match[1].replace(/[- ]/g, '').toUpperCase();
+        extractedName = clean.replace(match[0], '').replace(/[\(\)\[\],\-\t|:]/g, ' ').replace(/\s+/g, ' ').trim();
+      } else {
+        const delimMatch = clean.match(/^(.*?)(?:[,\t\-|–—]|\s*\((.*?)\))\s*([A-Za-z0-9]+)?$/);
+        if (delimMatch) {
+          const part1 = (delimMatch[1] || '').trim();
+          const part2 = (delimMatch[2] || delimMatch[3] || '').trim();
+          if (part2 && /^[A-Za-z0-9]{3,10}$/.test(part2)) {
+            extractedName = part1;
+            extractedRoll = part2.toUpperCase();
+          }
+        }
+      }
+
+      const nName = normNameStr(extractedName);
+      const nRoll = extractedRoll ? normStr(extractedRoll) : null;
+
+      // Check duplication against loaded players
+      // 1. Exact match on BOTH Name and Roll Number
+      const matchBoth = players.find(
+        (p) => normNameStr(p.name) === nName && nRoll && normStr(p.roll_no || '') === nRoll
+      );
+
+      if (matchBoth) {
+        return {
+          name: extractedName,
+          roll_no: extractedRoll,
+          status: 'already_registered' as const,
+          matchedPlayer: matchBoth,
+        };
+      }
+
+      // 2. Roll number conflict
+      if (nRoll) {
+        const rollConflict = players.find(
+          (p) => normStr(p.roll_no || '') === nRoll && normNameStr(p.name) !== nName
+        );
+        if (rollConflict) {
+          const bCode = typeof rollConflict.batch === 'object' ? rollConflict.batch?.code : rollConflict.batch || 'Batch';
+          return {
+            name: extractedName,
+            roll_no: extractedRoll,
+            status: 'roll_conflict' as const,
+            conflictMessage: `Roll number ${extractedRoll} belongs to ${rollConflict.name} (${bCode})`,
+            matchedPlayer: rollConflict,
+          };
+        }
+      }
+
+      // 3. Name match in same batch
+      const nameMatch = players.find(
+        (p) => p.batch_id === activeBatchId && normNameStr(p.name) === nName
+      );
+      if (nameMatch) {
+        return {
+          name: extractedName,
+          roll_no: extractedRoll,
+          status: 'name_conflict' as const,
+          conflictMessage: `Athlete named "${nameMatch.name}" already in batch (${nameMatch.roll_no || 'no roll'})`,
+          matchedPlayer: nameMatch,
+        };
+      }
+
+      return {
+        name: extractedName,
+        roll_no: extractedRoll,
+        status: 'new_player' as const,
+      };
+    });
+  }, [teamListRawText, players, activeBatchId]);
+
+  const parsedSummary = useMemo(() => {
+    const newCount = parsedTeamList.filter((p) => p.status === 'new_player').length;
+    const alreadyCount = parsedTeamList.filter((p) => p.status === 'already_registered').length;
+    const conflictCount = parsedTeamList.filter((p) => p.status === 'roll_conflict' || p.status === 'name_conflict').length;
+    return { newCount, alreadyCount, conflictCount };
+  }, [parsedTeamList]);
+
+  // Bulk Register & Draft from Team List
+  async function handleImportTeamListSubmit() {
+    if (parsedTeamList.length === 0) return;
+
+    setIsProcessingTeamList(true);
+    setFeedback('Registering players from team list and checking duplicates...');
+
+    const playersPayload: TeamListPlayerInput[] = parsedTeamList.map((entry, idx) => ({
+      name: entry.name,
+      roll_no: entry.roll_no,
+      slotType: idx < squadRules.playingCount ? 'playing' : 'optional',
+    }));
+
+    const res = await registerPlayersFromTeamList({
+      batch_id: activeBatchId,
+      gender: activeGender,
+      players: playersPayload,
+      team_id: editingTeam?.id,
+    });
+
+    if (res.error) {
+      setFeedback(`Error: ${res.error.message}`);
+      setIsProcessingTeamList(false);
+      return;
+    }
+
+    const data = res.data!;
+    const activeBatch = MOCK_BATCHES.find((b) => b.id === activeBatchId);
+
+    // Add newly registered players to local players state
+    const newlyRegisteredPlayers: Player[] = data.players
+      .filter((p) => p.status === 'newly_registered')
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        roll_no: p.roll_no || 'Pending',
+        batch_id: p.batch_id,
+        gender: p.gender,
+        batch: activeBatch,
+      }));
+
+    if (newlyRegisteredPlayers.length > 0) {
+      setPlayers((prev) => [...newlyRegisteredPlayers, ...prev]);
+    }
+
+    // Auto-assign all resolved players into squad slots
+    if (isAdding) {
+      setFormData((prev) => ({
+        ...prev,
+        playing_player_ids: Array.from(new Set([...prev.playing_player_ids, ...data.resolvedPlayingIds])),
+        optional_player_ids: Array.from(new Set([...prev.optional_player_ids, ...data.resolvedOptionalIds])),
+      }));
+    } else if (editingTeam) {
+      setEditingTeam((prev: any) => ({
+        ...prev,
+        playing_player_ids: Array.from(new Set([...(prev.playing_player_ids || []), ...data.resolvedPlayingIds])),
+        optional_player_ids: Array.from(new Set([...(prev.optional_player_ids || []), ...data.resolvedOptionalIds])),
+      }));
+    }
+
+    setIsProcessingTeamList(false);
+    setShowTeamListImport(false);
+    setTeamListRawText('');
+    setFeedback(
+      `Team list processed! ${data.newlyRegisteredCount} newly registered in database, ${data.alreadyRegisteredCount} existing athletes matched & drafted, ${data.conflictsCount} conflicts.`
+    );
+    setTimeout(() => setFeedback(null), 4500);
   }
 
   // ── Team CRUD Handlers ──
@@ -414,7 +625,7 @@ export default function AdminTeamsPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {unassignedAthletes.length > 0 && (
               <button
                 type="button"
@@ -422,13 +633,28 @@ export default function AdminTeamsPage() {
                 className="px-3 py-1.5 bg-surface-container-high hover:bg-gold-accent hover:text-navy-deep text-gold-accent font-caps-label text-[11px] uppercase font-bold rounded transition-colors cursor-pointer flex items-center gap-1 border border-gold-accent/40"
               >
                 <span className="material-symbols-outlined text-sm">auto_fix_high</span>
-                <span>Auto-Fill from Batch ({unassignedAthletes.length} avail)</span>
+                <span>Auto-Fill ({unassignedAthletes.length} avail)</span>
               </button>
             )}
 
             <button
               type="button"
-              onClick={() => setShowQuickAddPlayer(!showQuickAddPlayer)}
+              onClick={() => {
+                setShowTeamListImport(!showTeamListImport);
+                setShowQuickAddPlayer(false);
+              }}
+              className="px-3 py-1.5 bg-navy-mid border border-gold-accent text-gold-accent hover:bg-gold-accent hover:text-navy-deep font-caps-label text-[11px] uppercase font-bold rounded transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-sm">playlist_add_check</span>
+              <span>Import Team List</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowQuickAddPlayer(!showQuickAddPlayer);
+                setShowTeamListImport(false);
+              }}
               className="px-3 py-1.5 bg-gold-accent text-navy-deep font-caps-label text-[11px] uppercase font-extrabold rounded hover:bg-white transition-colors cursor-pointer flex items-center gap-1"
             >
               <span className="material-symbols-outlined text-sm">person_add</span>
@@ -436,6 +662,147 @@ export default function AdminTeamsPage() {
             </button>
           </div>
         </div>
+
+        {/* Team List Import & Duplicate Checker Console */}
+        {showTeamListImport && (
+          <div className="p-4 bg-surface-container-lowest border-2 border-gold-accent/70 rounded shadow-xl space-y-3 animate-in fade-in-50 duration-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-outline-variant/30 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-gold-accent text-xl">playlist_add_check</span>
+                <div>
+                  <h4 className="font-display text-white text-sm uppercase">
+                    IMPORT TEAM LIST FOR BATCH {MOCK_BATCHES.find((b) => b.id === activeBatchId)?.code}
+                  </h4>
+                  <p className="text-[11px] text-fog-text">
+                    Paste student names &amp; roll numbers. Unregistered players will be registered into the database with duplicate checks on roll number, name, or both.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTeamListImport(false)}
+                className="text-fog-text hover:text-white p-1"
+              >
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[11px] font-caps-label text-fog-text uppercase mb-1 font-bold">
+                  Paste / Enter Team List (One player per line)
+                </label>
+                <textarea
+                  rows={7}
+                  value={teamListRawText}
+                  onChange={(e) => setTeamListRawText(e.target.value)}
+                  placeholder={`1. Asad Memon - 24SW048\n2. Bilal Khan, 24SW12\n3. Farhan Ali (24SW33)\n4. Zubair Ahmed\t24SW99\n5. Tariq Shah`}
+                  className="w-full p-2.5 bg-surface-container border border-outline-variant/40 rounded text-white text-xs font-mono focus:border-gold-accent focus:outline-none"
+                />
+                <span className="text-[10px] text-fog-text block mt-1">
+                  Supports formats: &quot;Name - RollNo&quot;, &quot;Name, RollNo&quot;, &quot;Name (RollNo)&quot;, or tab-separated lines.
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-caps-label text-fog-text uppercase font-bold">
+                    Real-time Analysis ({parsedTeamList.length} Players)
+                  </span>
+                  <div className="flex items-center gap-1.5 text-[10px] font-caps-label">
+                    <span className="px-1.5 py-0.5 rounded bg-win-green/20 text-win-green font-bold">
+                      {parsedSummary.newCount} New
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-navy-mid text-gold-accent font-bold border border-gold-accent/30">
+                      {parsedSummary.alreadyCount} Registered
+                    </span>
+                    {parsedSummary.conflictCount > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-live-red/20 text-live-red font-bold">
+                        {parsedSummary.conflictCount} Conflicts
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1 bg-surface-container/60 p-2 rounded border border-outline-variant/20">
+                  {parsedTeamList.length === 0 ? (
+                    <div className="text-center py-6 text-xs text-fog-text italic">
+                      Paste player names and roll numbers in the box to see live duplicate checking.
+                    </div>
+                  ) : (
+                    parsedTeamList.map((entry, idx) => (
+                      <div
+                        key={idx}
+                        className="p-1.5 bg-surface-container rounded border border-outline-variant/20 flex items-center justify-between text-xs gap-2"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="font-mono text-[10px] text-fog-text w-4">{idx + 1}.</span>
+                          <span className="font-bold text-white truncate">{entry.name}</span>
+                          <span className="text-[10px] text-fog-text font-mono">
+                            ({entry.roll_no || 'No roll no'})
+                          </span>
+                        </div>
+
+                        <div className="shrink-0">
+                          {entry.status === 'already_registered' && (
+                            <span className="px-2 py-0.5 rounded bg-navy-mid text-gold-accent text-[10px] font-caps-label font-bold border border-gold-accent/40 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-xs">verified</span>
+                              <span>Already Registered</span>
+                            </span>
+                          )}
+                          {entry.status === 'new_player' && (
+                            <span className="px-2 py-0.5 rounded bg-win-green/20 text-win-green text-[10px] font-caps-label font-bold flex items-center gap-1">
+                              <span className="material-symbols-outlined text-xs">person_add</span>
+                              <span>Will Register</span>
+                            </span>
+                          )}
+                          {entry.status === 'roll_conflict' && (
+                            <span
+                              title={entry.conflictMessage}
+                              className="px-2 py-0.5 rounded bg-live-red/20 text-live-red text-[10px] font-caps-label font-bold flex items-center gap-1 cursor-help"
+                            >
+                              <span className="material-symbols-outlined text-xs">warning</span>
+                              <span>Roll Conflict</span>
+                            </span>
+                          )}
+                          {entry.status === 'name_conflict' && (
+                            <span
+                              title={entry.conflictMessage}
+                              className="px-2 py-0.5 rounded bg-gold-accent/20 text-gold-accent text-[10px] font-caps-label font-bold flex items-center gap-1 cursor-help"
+                            >
+                              <span className="material-symbols-outlined text-xs">info</span>
+                              <span>Same Name</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <div className="text-[10px] text-fog-text">
+                    Will auto-slot {Math.min(parsedTeamList.length, squadRules.playingCount)} into Playing Lineup
+                    {parsedTeamList.length > squadRules.playingCount &&
+                      ` and ${Math.min(parsedTeamList.length - squadRules.playingCount, squadRules.optionalCount)} into Reserves`}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleImportTeamListSubmit}
+                    disabled={isProcessingTeamList || parsedTeamList.length === 0}
+                    className="px-4 py-2 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-extrabold rounded hover:bg-white transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-sm">
+                      {isProcessingTeamList ? 'sync' : 'how_to_reg'}
+                    </span>
+                    <span>{isProcessingTeamList ? 'Registering & Drafting...' : 'Register & Draft Squad'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Quick Add Inline Modal/Form */}
         {showQuickAddPlayer && (
