@@ -119,7 +119,7 @@ create table if not exists standings (
 create table if not exists admins (
   id   uuid primary key,  -- = auth.users.id
   name text not null,
-  role text not null default 'admin' check (role in ('admin', 'superadmin'))
+  role text not null default 'admin' check (role in ('admin', 'superadmin', 'scorer'))
 );
 
 -- ─── Indexes ────────────────────────────────────────────────

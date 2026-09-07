@@ -168,10 +168,25 @@ export type StandingBreakdown = {
   };
 };
 
+export type UserRole = 'superadmin' | 'admin' | 'scorer';
+
 export type Admin = {
   id: string; // Supabase auth user id
   name: string;
-  role: 'admin' | 'superadmin';
+  role: UserRole;
+};
+
+export type AuthSessionUser = {
+  email: string;
+  name: string;
+  role: UserRole;
+};
+
+export type ScorerAccount = {
+  name: string;
+  email: string;
+  defaultPassword?: string;
+  role: 'scorer';
 };
 
 // ─── Server Action response shape ─────────────────────────────────────────

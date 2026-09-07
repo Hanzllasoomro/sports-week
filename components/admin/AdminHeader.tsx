@@ -6,19 +6,26 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { logoutAdmin } from '@/app/actions/admin';
 
-export function AdminHeader() {
+import type { AuthSessionUser } from '@/types';
+
+export function AdminHeader({ user }: { user?: AuthSessionUser | null }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
+  const isScorer = user?.role === 'scorer';
 
-  const links = [
-    { label: 'Dashboard', href: '/admin/dashboard', icon: 'dashboard' },
-    { label: 'Fixtures', href: '/admin/fixtures', icon: 'edit_calendar' },
-    { label: 'Results', href: '/admin/results', icon: 'scoreboard' },
-    { label: 'Batches', href: '/admin/batches', icon: 'school' },
-    { label: 'Games', href: '/admin/games', icon: 'sports' },
-    { label: 'Teams', href: '/admin/teams', icon: 'groups' },
-    { label: 'Players', href: '/admin/players', icon: 'person' },
-  ];
+  const links = isScorer
+    ? [{ label: 'Score & Marathon Results', href: '/admin/results', icon: 'scoreboard' }]
+    : [
+        { label: 'Dashboard', href: '/admin/dashboard', icon: 'dashboard' },
+        { label: 'Fixtures', href: '/admin/fixtures', icon: 'edit_calendar' },
+        { label: 'Results', href: '/admin/results', icon: 'scoreboard' },
+        { label: 'Batches', href: '/admin/batches', icon: 'school' },
+        { label: 'Games', href: '/admin/games', icon: 'sports' },
+        { label: 'Teams', href: '/admin/teams', icon: 'groups' },
+        { label: 'Players', href: '/admin/players', icon: 'person' },
+      ];
+
+  const brandHref = isScorer ? '/admin/results' : '/admin/dashboard';
 
   return (
     <>
@@ -36,22 +43,39 @@ export function AdminHeader() {
             </span>
           </button>
 
-          <Link href="/admin/dashboard" className="flex items-center gap-2">
+          <Link href={brandHref} className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-gold-accent" />
             <span className="font-display text-gold-accent text-lg sm:text-xl uppercase tracking-wider">
-              ADMIN CONSOLE
+              {isScorer ? 'SCORER CONSOLE' : 'ADMIN CONSOLE'}
             </span>
           </Link>
         </div>
 
-        {/* Center: System status */}
-        <div className="hidden md:flex items-center gap-2 text-xs font-caps-label text-fog-text">
-          <span className="w-2 h-2 rounded-full bg-win-green" />
-          <span>DATABASE CONNECTED &bull; STATUS NOMINAL</span>
+        {/* Center: System status and user role identity */}
+        <div className="hidden md:flex items-center gap-3">
+          {isScorer ? (
+            <div className="flex items-center gap-2 px-3 py-1 bg-surface-container-lowest border border-gold-accent/40 rounded-full text-xs font-caps-label text-gold-accent">
+              <span className="w-2 h-2 rounded-full bg-gold-accent animate-pulse" />
+              <span>OFFICIAL SCORER: <strong className="text-white">{user?.name}</strong></span>
+              <span className="text-[10px] text-fog-text">({user?.email})</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs font-caps-label text-fog-text">
+              <span className="w-2 h-2 rounded-full bg-win-green" />
+              <span>DATABASE CONNECTED &bull; STATUS NOMINAL</span>
+            </div>
+          )}
         </div>
 
         {/* Right side controls */}
         <div className="flex items-center gap-3">
+          {/* Mobile scorer badge if mobile */}
+          {isScorer && (
+            <span className="md:hidden px-2 py-0.5 rounded bg-gold-accent/20 border border-gold-accent/30 text-gold-accent text-[10px] font-caps-label uppercase font-bold">
+              {user?.name}
+            </span>
+          )}
+
           <Link
             href="/"
             target="_blank"

@@ -1,12 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { saveResult, saveIndividualResult } from '@/app/actions/results';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { saveResult, saveIndividualResult, saveMarathonResult, getMarathonResults } from '@/app/actions/results';
 import type { FixtureWithRelations, Game, Batch } from '@/types';
 import { MOCK_FIXTURES, MOCK_GAMES, MOCK_BATCHES } from '@/lib/mock-data';
 import { CricketScorerRoom } from '@/components/admin/CricketScorerRoom';
 
-export default function AdminResultsPage() {
+function ResultsContent() {
+  const searchParams = useSearchParams();
+  const isRestricted = searchParams.get('restricted') === 'true';
+
   const [fixtures, setFixtures] = useState<FixtureWithRelations[]>(MOCK_FIXTURES);
   const [selectedFixtureId, setSelectedFixtureId] = useState<string>(MOCK_FIXTURES[0]?.id || '');
   const [scoreA, setScoreA] = useState<number>(MOCK_FIXTURES[0]?.score_a ?? 0);
@@ -15,23 +19,35 @@ export default function AdminResultsPage() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Tab State: 'team' | 'marathon' | 'individual'
+  const [tab, setTab] = useState<'team' | 'marathon' | 'individual'>('team');
+
   // Individual Podium State
-  const [tab, setTab] = useState<'team' | 'individual'>('team');
   const [podiumGameId, setPodiumGameId] = useState<string>(MOCK_GAMES[6].id); // Badminton
   const [podiumBatchId, setPodiumBatchId] = useState<string>(MOCK_BATCHES[2].id);
   const [podiumGender, setPodiumGender] = useState<'boys' | 'girls'>('boys');
   const [podiumPosition, setPodiumPosition] = useState<number>(1);
   const [podiumPoints, setPodiumPoints] = useState<number>(10);
 
+  // Dedicated Marathon Winner State
+  const [marathonGender, setMarathonGender] = useState<'boys' | 'girls'>('boys');
+  const [marathonPosition, setMarathonPosition] = useState<number>(1);
+  const [marathonBatchId, setMarathonBatchId] = useState<string>(MOCK_BATCHES[2].id);
+  const [marathonPoints, setMarathonPoints] = useState<number>(10);
+  const [marathonRunnerName, setMarathonRunnerName] = useState<string>('');
+  const [marathonRunnerRoll, setMarathonRunnerRoll] = useState<string>('');
+  const [marathonResultsList, setMarathonResultsList] = useState<any[]>([]);
+
   const [players, setPlayers] = useState<any[]>([]);
 
-  // Load real fixtures and players from API on mount
+  // Load real fixtures, players, and marathon results on mount
   useEffect(() => {
     async function loadData() {
       try {
-        const [fixRes, playRes] = await Promise.all([
+        const [fixRes, playRes, marathonData] = await Promise.all([
           fetch('/api/fixtures'),
           fetch('/api/players'),
+          getMarathonResults(),
         ]);
 
         if (fixRes.ok) {
@@ -50,8 +66,12 @@ export default function AdminResultsPage() {
             setPlayers(playData);
           }
         }
+
+        if (Array.isArray(marathonData)) {
+          setMarathonResultsList(marathonData);
+        }
       } catch (err) {
-        console.error('Failed to load fixtures / players', err);
+        console.error('Failed to load fixtures / players / marathon', err);
       }
     }
     loadData();
@@ -66,6 +86,39 @@ export default function AdminResultsPage() {
       setStatus(selectedFixture.status === 'completed' ? 'completed' : 'live');
     }
   }, [selectedFixtureId]);
+
+  async function handleSaveMarathon(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setFeedback('Recording Official Marathon Winner & calculating points...');
+
+    const res = await saveMarathonResult({
+      batch_id: marathonBatchId,
+      gender: marathonGender,
+      position: marathonPosition,
+      points_awarded: marathonPoints,
+      runner_name: marathonRunnerName,
+      runner_roll_no: marathonRunnerRoll,
+    });
+
+    if (res.error) {
+      setFeedback(`Error: ${res.error.message}`);
+    } else {
+      const posLabel = marathonPosition === 1 ? '1st (Gold 🥇)' : marathonPosition === 2 ? '2nd (Silver 🥈)' : '3rd (Bronze 🥉)';
+      const batchCode = MOCK_BATCHES.find((b) => b.id === marathonBatchId)?.code || 'Batch';
+      setFeedback(`Marathon Result Saved! ${batchCode} awarded ${marathonPoints} points for ${marathonGender.toUpperCase()} ${posLabel}!`);
+      
+      // Refresh list
+      const freshList = await getMarathonResults();
+      if (Array.isArray(freshList)) {
+        setMarathonResultsList(freshList);
+      }
+      setMarathonRunnerName('');
+      setMarathonRunnerRoll('');
+    }
+    setIsSubmitting(false);
+    setTimeout(() => setFeedback(null), 5000);
+  }
 
   async function handleSaveTeamScore(e: React.FormEvent) {
     e.preventDefault();
@@ -203,31 +256,60 @@ export default function AdminResultsPage() {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center rounded border border-outline-variant/40 p-1 bg-surface-container-lowest">
+        <div className="flex flex-wrap items-center rounded border border-outline-variant/40 p-1 bg-surface-container-lowest gap-1">
           <button
             type="button"
             onClick={() => setTab('team')}
-            className={`px-4 py-2 font-caps-label text-xs uppercase font-bold transition-colors cursor-pointer ${
+            className={`px-3.5 py-2 font-caps-label text-xs uppercase font-bold transition-colors cursor-pointer rounded-sm flex items-center gap-1.5 ${
               tab === 'team'
                 ? 'bg-gold-accent text-navy-deep'
                 : 'bg-surface-container text-fog-text hover:text-white'
             }`}
           >
-            Match Scoreboard
+            <span className="material-symbols-outlined text-sm">scoreboard</span>
+            <span>Match Scoreboard</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('marathon')}
+            className={`px-3.5 py-2 font-caps-label text-xs uppercase font-bold transition-colors cursor-pointer rounded-sm flex items-center gap-1.5 ${
+              tab === 'marathon'
+                ? 'bg-gold-accent text-navy-deep'
+                : 'bg-surface-container text-fog-text hover:text-white'
+            }`}
+          >
+            <span className="material-symbols-outlined text-sm">directions_run</span>
+            <span>Winner Marathon</span>
           </button>
           <button
             type="button"
             onClick={() => setTab('individual')}
-            className={`px-4 py-2 font-caps-label text-xs uppercase font-bold transition-colors cursor-pointer ${
+            className={`px-3.5 py-2 font-caps-label text-xs uppercase font-bold transition-colors cursor-pointer rounded-sm flex items-center gap-1.5 ${
               tab === 'individual'
                 ? 'bg-gold-accent text-navy-deep'
                 : 'bg-surface-container text-fog-text hover:text-white'
             }`}
           >
-            Individual Podium
+            <span className="material-symbols-outlined text-sm">military_tech</span>
+            <span>Individual Podium</span>
           </button>
         </div>
       </div>
+
+      {/* Scorer Access Restricted Banner if redirected */}
+      {isRestricted && (
+        <div className="mb-6 p-4 bg-navy-mid/90 border-l-4 border-gold-accent rounded text-xs flex items-start gap-3 shadow-lg">
+          <span className="material-symbols-outlined text-gold-accent text-xl mt-0.5">verified_user</span>
+          <div>
+            <div className="font-caps-label text-gold-accent uppercase font-bold text-xs">
+              Official Scorer Workspace
+            </div>
+            <p className="mt-0.5 text-fog-text">
+              Your official account is authorized specifically to add match scores and declare game winners &amp; marathon podiums.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Feedback Banner */}
       {feedback && (
@@ -497,27 +579,260 @@ export default function AdminResultsPage() {
             </div>
           </div>
         </div>
+      ) : tab === 'marathon' ? (
+        /* ── DEDICATED MARATHON WINNERS TAB ── */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Winner Form */}
+          <div className="lg:col-span-7 bg-surface-container border border-outline-variant/30 rounded p-6 shadow-xl">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="material-symbols-outlined text-2xl text-gold-accent">directions_run</span>
+              <h2 className="font-display text-white text-xl uppercase tracking-wider">
+                DECLARE MARATHON WINNERS
+              </h2>
+            </div>
+            <p className="font-body text-fog-text text-xs mb-6">
+              Official Scorer portal for recording 1st, 2nd, and 3rd place finishes for the SES Mini Marathon. Points are credited to the runner&apos;s batch standing automatically.
+            </p>
+
+            <form onSubmit={handleSaveMarathon} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-semibold">
+                    Division / Category
+                  </label>
+                  <select
+                    value={marathonGender}
+                    onChange={(e) => setMarathonGender(e.target.value as any)}
+                    className="w-full px-3.5 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-semibold focus:border-gold-accent focus:outline-none"
+                  >
+                    <option value="boys">Boys Marathon (3.5km Campus Loop)</option>
+                    <option value="girls">Girls Marathon (3.5km Campus Loop)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-semibold">
+                    Podium Finish
+                  </label>
+                  <select
+                    value={marathonPosition}
+                    onChange={(e) => {
+                      const pos = Number(e.target.value);
+                      setMarathonPosition(pos);
+                      setMarathonPoints(pos === 1 ? 10 : pos === 2 ? 7 : 5);
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-semibold focus:border-gold-accent focus:outline-none"
+                  >
+                    <option value={1}>🥇 1st Place &bull; Gold Medal (10 Pts)</option>
+                    <option value={2}>🥈 2nd Place &bull; Silver Medal (7 Pts)</option>
+                    <option value={3}>🥉 3rd Place &bull; Bronze Medal (5 Pts)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-semibold">
+                  Winning Batch
+                </label>
+                <select
+                  value={marathonBatchId}
+                  onChange={(e) => setMarathonBatchId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-semibold focus:border-gold-accent focus:outline-none"
+                >
+                  {MOCK_BATCHES.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.code} ({b.department.code} — {b.year})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                    Runner Full Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Sajid Ali"
+                    value={marathonRunnerName}
+                    onChange={(e) => setMarathonRunnerName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs focus:border-gold-accent focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                    Roll Number (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 24SW05"
+                    value={marathonRunnerRoll}
+                    onChange={(e) => setMarathonRunnerRoll(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs focus:border-gold-accent focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                  Championship Points to Award
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={marathonPoints}
+                  onChange={(e) => setMarathonPoints(Number(e.target.value))}
+                  required
+                  className="w-full px-3.5 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-table-numeral focus:border-gold-accent focus:outline-none font-bold"
+                />
+                <span className="text-[10px] text-fog-text mt-1 block">
+                  Official rule points: Gold = 10 pts, Silver = 7 pts, Bronze = 5 pts.
+                </span>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full mt-2 px-6 py-3.5 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors cursor-pointer shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <span className="material-symbols-outlined text-base">emoji_events</span>
+                <span>{isSubmitting ? 'Recording Marathon Winner...' : 'Award Marathon Podium Finish'}</span>
+              </button>
+            </form>
+          </div>
+
+          {/* Declared Marathon Podium Cards */}
+          <div className="lg:col-span-5 flex flex-col gap-6">
+            {/* Boys Division Podium */}
+            <div className="bg-surface-container border border-outline-variant/30 rounded p-5 shadow-xl">
+              <div className="flex items-center justify-between mb-4 border-b border-outline-variant/20 pb-2">
+                <h3 className="font-caps-label text-xs uppercase text-white font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-400" />
+                  <span>Boys Marathon Podium</span>
+                </h3>
+                <span className="font-caps-label text-[10px] uppercase text-fog-text">3.5km Race</span>
+              </div>
+
+              <div className="flex flex-col gap-2.5">
+                {[
+                  { pos: 1, medal: '🥇', label: 'Gold Champion', pts: 10, border: 'border-gold-accent/40 bg-gold-accent/10' },
+                  { pos: 2, medal: '🥈', label: 'Silver Runner-Up', pts: 7, border: 'border-outline-variant/40 bg-navy-mid/40' },
+                  { pos: 3, medal: '🥉', label: 'Bronze 3rd Place', pts: 5, border: 'border-outline-variant/40 bg-navy-mid/40' },
+                ].map((tier) => {
+                  const winner = marathonResultsList.find(
+                    (r) => r.gender === 'boys' && r.position === tier.pos
+                  );
+
+                  return (
+                    <div
+                      key={tier.pos}
+                      className={`p-3 rounded border flex items-center justify-between ${tier.border}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">{tier.medal}</span>
+                        <div>
+                          <div className="font-caps-label text-[10px] uppercase text-fog-text">
+                            {tier.label}
+                          </div>
+                          <div className="text-xs font-bold text-white">
+                            {winner ? (
+                              <span>
+                                {winner.player?.name || 'Runner'} ({winner.batch?.code})
+                              </span>
+                            ) : (
+                              <span className="text-fog-text/60 italic">Not yet awarded</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-table-numeral text-xs font-bold text-gold-accent">
+                          {winner ? `+${winner.points_awarded || tier.pts} pts` : `${tier.pts} pts`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Girls Division Podium */}
+            <div className="bg-surface-container border border-outline-variant/30 rounded p-5 shadow-xl">
+              <div className="flex items-center justify-between mb-4 border-b border-outline-variant/20 pb-2">
+                <h3 className="font-caps-label text-xs uppercase text-white font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-pink-400" />
+                  <span>Girls Marathon Podium</span>
+                </h3>
+                <span className="font-caps-label text-[10px] uppercase text-fog-text">3.5km Race</span>
+              </div>
+
+              <div className="flex flex-col gap-2.5">
+                {[
+                  { pos: 1, medal: '🥇', label: 'Gold Champion', pts: 10, border: 'border-gold-accent/40 bg-gold-accent/10' },
+                  { pos: 2, medal: '🥈', label: 'Silver Runner-Up', pts: 7, border: 'border-outline-variant/40 bg-navy-mid/40' },
+                  { pos: 3, medal: '🥉', label: 'Bronze 3rd Place', pts: 5, border: 'border-outline-variant/40 bg-navy-mid/40' },
+                ].map((tier) => {
+                  const winner = marathonResultsList.find(
+                    (r) => r.gender === 'girls' && r.position === tier.pos
+                  );
+
+                  return (
+                    <div
+                      key={tier.pos}
+                      className={`p-3 rounded border flex items-center justify-between ${tier.border}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">{tier.medal}</span>
+                        <div>
+                          <div className="font-caps-label text-[10px] uppercase text-fog-text">
+                            {tier.label}
+                          </div>
+                          <div className="text-xs font-bold text-white">
+                            {winner ? (
+                              <span>
+                                {winner.player?.name || 'Runner'} ({winner.batch?.code})
+                              </span>
+                            ) : (
+                              <span className="text-fog-text/60 italic">Not yet awarded</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-table-numeral text-xs font-bold text-gold-accent">
+                          {winner ? `+${winner.points_awarded || tier.pts} pts` : `${tier.pts} pts`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
       ) : (
-        /* ── INDIVIDUAL PODIUM TAB ── */
+        /* ── OTHER INDIVIDUAL PODIUM TAB ── */
         <div className="bg-surface-container border border-outline-variant/30 rounded p-6 max-w-2xl mx-auto shadow-xl">
           <h2 className="font-display text-gold-accent uppercase text-xl mb-2">
             INDIVIDUAL SPORT PODIUM FINISH
           </h2>
           <p className="font-body text-fog-text text-xs mb-6">
-            Award 1st, 2nd, or 3rd place finishes for Badminton, Table Tennis, Chess, or Marathon.
+            Award 1st, 2nd, or 3rd place finishes for Badminton, Table Tennis, or Chess.
           </p>
 
           <form onSubmit={handleSavePodium} className="space-y-4">
             <div>
-              <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+              <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-semibold">
                 Sport
               </label>
               <select
                 value={podiumGameId}
                 onChange={(e) => setPodiumGameId(e.target.value)}
-                className="w-full px-3.5 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                className="w-full px-3.5 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs focus:border-gold-accent focus:outline-none"
               >
-                {MOCK_GAMES.filter((g) => g.format === 'individual').map((g) => (
+                {MOCK_GAMES.filter((g) => g.format === 'individual' && g.slug !== 'mini-marathon').map((g) => (
                   <option key={g.id} value={g.id}>
                     {g.name}
                   </option>
@@ -527,13 +842,13 @@ export default function AdminResultsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-semibold">
                   Batch
                 </label>
                 <select
                   value={podiumBatchId}
                   onChange={(e) => setPodiumBatchId(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                  className="w-full px-3.5 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs focus:border-gold-accent focus:outline-none"
                 >
                   {MOCK_BATCHES.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -544,13 +859,13 @@ export default function AdminResultsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-semibold">
                   Category
                 </label>
                 <select
                   value={podiumGender}
                   onChange={(e) => setPodiumGender(e.target.value as any)}
-                  className="w-full px-3.5 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                  className="w-full px-3.5 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs focus:border-gold-accent focus:outline-none"
                 >
                   <option value="boys">Boys</option>
                   <option value="girls">Girls</option>
@@ -560,7 +875,7 @@ export default function AdminResultsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-semibold">
                   Podium Position
                 </label>
                 <select
@@ -570,7 +885,7 @@ export default function AdminResultsPage() {
                     setPodiumPosition(pos);
                     setPodiumPoints(pos === 1 ? 10 : pos === 2 ? 7 : 5);
                   }}
-                  className="w-full px-3.5 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs"
+                  className="w-full px-3.5 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs focus:border-gold-accent focus:outline-none"
                 >
                   <option value={1}>1st Place &bull; Gold Medal</option>
                   <option value={2}>2nd Place &bull; Silver Medal</option>
@@ -579,7 +894,7 @@ export default function AdminResultsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1">
+                <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-semibold">
                   Points Credited
                 </label>
                 <input
@@ -587,7 +902,7 @@ export default function AdminResultsPage() {
                   value={podiumPoints}
                   onChange={(e) => setPodiumPoints(Number(e.target.value))}
                   required
-                  className="w-full px-3.5 py-2 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-table-numeral"
+                  className="w-full px-3.5 py-2.5 bg-surface-container-lowest border border-outline-variant/40 rounded text-white text-xs font-table-numeral focus:border-gold-accent focus:outline-none font-bold"
                 />
               </div>
             </div>
@@ -603,5 +918,19 @@ export default function AdminResultsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AdminResultsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex-1 p-8 text-center text-fog-text font-caps-label uppercase text-xs">
+          Loading score and result entry room...
+        </div>
+      }
+    >
+      <ResultsContent />
+    </Suspense>
   );
 }

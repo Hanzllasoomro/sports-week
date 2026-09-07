@@ -1,6 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-import { verifyAdminSession } from '@/lib/security/auth';
+import { verifyAndDecodeAdminSession } from '@/lib/security/auth';
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -35,8 +35,8 @@ export async function proxy(request: NextRequest) {
   const isAdminRoute = request.nextUrl.pathname.startsWith('/admin');
   const isLoginRoute = request.nextUrl.pathname === '/admin/login';
   const adminSessionToken = request.cookies.get('admin_session')?.value;
-  const isCryptographicSessionValid = await verifyAdminSession(adminSessionToken);
-  const isAuthenticated = !!user || isCryptographicSessionValid;
+  const sessionUser = await verifyAndDecodeAdminSession(adminSessionToken);
+  const isAuthenticated = !!user || !!sessionUser;
 
   if (isAdminRoute && !isLoginRoute && !isAuthenticated) {
     const loginUrl = request.nextUrl.clone();
@@ -47,9 +47,29 @@ export async function proxy(request: NextRequest) {
 
   // Redirect already-logged-in users away from login page
   if (isLoginRoute && isAuthenticated) {
+    if (sessionUser?.role === 'scorer') {
+      const resultsUrl = request.nextUrl.clone();
+      resultsUrl.pathname = '/admin/results';
+      return NextResponse.redirect(resultsUrl);
+    }
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = '/admin/dashboard';
     return NextResponse.redirect(dashboardUrl);
+  }
+
+  // Role-Based Access Control for 'scorer' role:
+  // Scorers only have access to /admin/results
+  if (isAdminRoute && sessionUser?.role === 'scorer') {
+    const isAllowedScorerRoute =
+      request.nextUrl.pathname === '/admin/results' ||
+      request.nextUrl.pathname.startsWith('/admin/results/');
+
+    if (!isAllowedScorerRoute) {
+      const resultsUrl = request.nextUrl.clone();
+      resultsUrl.pathname = '/admin/results';
+      resultsUrl.searchParams.set('restricted', 'true');
+      return NextResponse.redirect(resultsUrl);
+    }
   }
 
   return supabaseResponse;

@@ -203,3 +203,109 @@ export async function saveIndividualResult(raw: unknown): Promise<ActionResult<I
     return { error: { message, code: 'DB_ERROR' } };
   }
 }
+
+/**
+ * Save a Marathon winner / podium finish (Gold, Silver, Bronze).
+ * Automatically handles runner attribution and batch standings recomputation.
+ */
+export async function saveMarathonResult(payload: {
+  batch_id: string;
+  gender: 'boys' | 'girls';
+  position: number;
+  points_awarded: number;
+  runner_name?: string;
+  runner_roll_no?: string;
+}): Promise<ActionResult<any>> {
+  try {
+    const supabase = await createServiceClient();
+
+    // 1. Get Mini Marathon game id
+    const { data: game } = await supabase
+      .from('games')
+      .select('id')
+      .eq('slug', 'mini-marathon')
+      .single();
+
+    const gameId = game?.id || 'c1000000-0000-0000-0000-000000000010';
+
+    // 2. If runner name is provided, create/link player
+    let playerId: string | null = null;
+    if (payload.runner_name && payload.runner_name.trim()) {
+      const { data: newPlayer } = await supabase
+        .from('players')
+        .insert({
+          name: payload.runner_name.trim(),
+          roll_no: payload.runner_roll_no?.trim() || null,
+          batch_id: payload.batch_id,
+          gender: payload.gender,
+        })
+        .select('id')
+        .single();
+      playerId = newPlayer?.id || null;
+    }
+
+    // 3. Upsert marathon result
+    const { data, error } = await supabase
+      .from('individual_results')
+      .upsert(
+        {
+          game_id: gameId,
+          batch_id: payload.batch_id,
+          gender: payload.gender,
+          position: payload.position,
+          points_awarded: payload.points_awarded,
+          player_id: playerId,
+        },
+        { onConflict: 'game_id,gender,position' }
+      )
+      .select('*, batch:batches(*), player:players(*)')
+      .single();
+
+    if (error) throw error;
+
+    // 4. Recompute standing for affected batch
+    await recomputeStanding(payload.batch_id);
+
+    // 5. Revalidate public and admin views
+    revalidatePath('/');
+    revalidatePath('/standings');
+    revalidatePath('/live');
+    revalidatePath('/admin/dashboard');
+    revalidatePath('/admin/results');
+    revalidatePath('/games/mini-marathon');
+
+    return { data };
+  } catch (err: unknown) {
+    console.error('[saveMarathonResult]', err);
+    const message = err instanceof Error ? err.message : 'Failed to save marathon winner';
+    return { error: { message, code: 'DB_ERROR' } };
+  }
+}
+
+/**
+ * Fetch all declared marathon podium results
+ */
+export async function getMarathonResults(): Promise<any[]> {
+  try {
+    const supabase = await createServiceClient();
+    const { data: game } = await supabase
+      .from('games')
+      .select('id')
+      .eq('slug', 'mini-marathon')
+      .single();
+
+    const gameId = game?.id || 'c1000000-0000-0000-0000-000000000010';
+
+    const { data, error } = await supabase
+      .from('individual_results')
+      .select('*, batch:batches(*), player:players(*)')
+      .eq('game_id', gameId)
+      .order('gender', { ascending: true })
+      .order('position', { ascending: true });
+
+    if (!error && data) return data;
+  } catch (err) {
+    console.error('[getMarathonResults]', err);
+  }
+  return [];
+}

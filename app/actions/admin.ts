@@ -6,9 +6,9 @@ import { revalidatePath } from 'next/cache';
 import { createClient as createServerSupabase, createServiceClient } from '@/lib/supabase/server';
 import type { ActionResult } from '@/types';
 
-import { signAdminSession } from '@/lib/security/auth';
+import { signAdminSession, verifyScorerCredentials, findScorerByEmail } from '@/lib/security/auth';
 
-/** Admin login handler */
+/** Admin / Scorer login handler */
 export async function loginAdmin(formData: FormData): Promise<void> {
   const email = (formData.get('email') as string)?.trim().toLowerCase();
   const password = (formData.get('password') as string)?.trim();
@@ -19,12 +19,26 @@ export async function loginAdmin(formData: FormData): Promise<void> {
 
   const cookieStore = await cookies();
 
-  // 1. Secure Check against deployment environment variables
+  // 1. Official Scorer accounts check (Sajid, Abdullah, Zaheer, Aina, Tayyaba)
+  const scorer = verifyScorerCredentials(email, password);
+  if (scorer) {
+    const token = await signAdminSession(scorer.email, 'scorer', scorer.name);
+    cookieStore.set('admin_session', token, {
+      path: '/',
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    });
+    redirect('/admin/results');
+  }
+
+  // 2. Secure Check against deployment environment variables (Superadmin)
   const envEmail = (process.env.ADMIN_EMAIL || 'admin@muet.edu.pk').toLowerCase().trim();
   const envPassword = process.env.ADMIN_PASSWORD || 'SES_SportsWeek_2026!';
 
   if (email === envEmail && password === envPassword) {
-    const token = await signAdminSession(email);
+    const token = await signAdminSession(email, 'superadmin', 'Tournament Administrator');
     cookieStore.set('admin_session', token, {
       path: '/',
       httpOnly: true,
@@ -35,7 +49,7 @@ export async function loginAdmin(formData: FormData): Promise<void> {
     redirect('/admin/dashboard');
   }
 
-  // 2. Try Supabase Auth
+  // 3. Try Supabase Auth (DB-synced credentials)
   try {
     const supabase = await createServerSupabase();
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -48,7 +62,18 @@ export async function loginAdmin(formData: FormData): Promise<void> {
     }
 
     if (data.user) {
-      const token = await signAdminSession(email);
+      // Lookup role from admins table
+      const { data: profile } = await supabase
+        .from('admins')
+        .select('role, name')
+        .eq('id', data.user.id)
+        .single();
+
+      const matchedScorer = findScorerByEmail(email);
+      const role = profile?.role || (matchedScorer ? 'scorer' : 'admin');
+      const name = profile?.name || matchedScorer?.name || data.user.user_metadata?.name || 'Tournament Official';
+
+      const token = await signAdminSession(email, role, name);
       cookieStore.set('admin_session', token, {
         path: '/',
         httpOnly: true,
@@ -56,7 +81,12 @@ export async function loginAdmin(formData: FormData): Promise<void> {
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 7,
       });
-      redirect('/admin/dashboard');
+
+      if (role === 'scorer') {
+        redirect('/admin/results');
+      } else {
+        redirect('/admin/dashboard');
+      }
     }
   } catch (err) {
     if ((err as any)?.digest?.startsWith('NEXT_REDIRECT')) {
