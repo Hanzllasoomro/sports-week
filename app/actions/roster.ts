@@ -568,7 +568,18 @@ export async function createTeam(raw: unknown): Promise<ActionResult<Team & { pl
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      if (error.code === '23505') {
+        const batchCode = teamFields.batch_id ? 'this batch' : 'the batch';
+        return {
+          error: {
+            message: `Squad Conflict: A team is already registered for ${batchCode} in this sport and gender division. The database currently enforces one team per Batch/Sport/Gender (constraint: teams_game_id_batch_id_gender_key).`,
+            code: 'DUPLICATE_TEAM',
+          },
+        };
+      }
+      throw error;
+    }
 
     if (playing_player_ids || optional_player_ids) {
       const { persistTeamSquad } = await import('@/lib/data/team-squad-store');

@@ -480,19 +480,36 @@ export default function AdminTeamsPage() {
     setTimeout(() => setFeedback(null), 4500);
   }
 
+  // Real-time check for duplicate squad in Add form (game_id, batch_id, gender)
+  const existingSquadConflict =
+    isAdding &&
+    teams.find(
+      (t) =>
+        t.game_id === formData.game_id &&
+        t.batch_id === formData.batch_id &&
+        t.gender === formData.gender
+    );
+
   // ── Team CRUD Handlers ──
   async function handleAddTeam(e: React.FormEvent) {
     e.preventDefault();
     if (!formData.name) return;
 
+    if (existingSquadConflict) {
+      alert(`Squad Conflict: "${existingSquadConflict.name}" is already registered for this Batch in ${existingSquadConflict.game} (${existingSquadConflict.gender}). The database allows only 1 squad per batch/sport/gender.`);
+      return;
+    }
+
     setFeedback('Creating team & locking in squad lineup in tournament database...');
     const res = await createTeam(formData);
 
     if (res.error) {
-      setFeedback(`Note: ${res.error.message} (Optimistically added)`);
-    } else {
-      setFeedback(`Squad ${formData.name} registered with ${formData.playing_player_ids.length} Playing + ${formData.optional_player_ids.length} Optional players!`);
+      setFeedback(`Error: ${res.error.message}`);
+      alert(`Could not save team to database:\n${res.error.message}`);
+      return;
     }
+
+    setFeedback(`Squad ${formData.name} registered with ${formData.playing_player_ids.length} Playing + ${formData.optional_player_ids.length} Optional players!`);
 
     const g = MOCK_GAMES.find((x) => x.id === formData.game_id);
     const b = MOCK_BATCHES.find((x) => x.id === formData.batch_id);
@@ -1098,6 +1115,21 @@ export default function AdminTeamsPage() {
             REGISTER NEW SQUAD &amp; LINEUP
           </h3>
 
+          {/* Real-time duplicate squad warning */}
+          {existingSquadConflict && (
+            <div className="p-3.5 bg-live-red/20 border border-live-red/50 rounded text-xs text-live-red font-caps-label flex items-start gap-2.5">
+              <span className="material-symbols-outlined text-base shrink-0 mt-0.5">warning</span>
+              <div>
+                <span className="font-bold block">
+                  Squad Conflict: &quot;{existingSquadConflict.name}&quot; is already registered for this batch in {existingSquadConflict.game} ({existingSquadConflict.gender}).
+                </span>
+                <span className="text-[11px] text-fog-text block mt-0.5">
+                  The database currently enforces 1 squad per Batch/Sport/Gender (constraint: teams_game_id_batch_id_gender_key). Select a different batch or sport, or run the migration to allow multiple squads.
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-caps-label text-fog-text uppercase mb-1 font-bold">
@@ -1235,7 +1267,8 @@ export default function AdminTeamsPage() {
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors cursor-pointer shadow-lg"
+              disabled={!!existingSquadConflict}
+              className="px-6 py-2.5 bg-gold-accent text-navy-deep font-caps-label text-xs uppercase font-bold hover:bg-white transition-colors cursor-pointer shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Save Squad &amp; Roster
             </button>
